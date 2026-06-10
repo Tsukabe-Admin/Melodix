@@ -45,13 +45,14 @@ Melodix is a premium, modern, and highly customized Terminal User Interface (TUI
 
 ### Prerequisites
 
-Ensure you have python (>= 3.7) and `mpv` installed on your system.
+Ensure you have python (>= 3.9), `mpv`, and `ffmpeg` installed on your system.
+
 ```bash
 # Arch Linux
-sudo pacman -S mpv python
+sudo pacman -S mpv ffmpeg python
 
 # Debian/Ubuntu
-sudo apt install mpv python3
+sudo apt install mpv ffmpeg python3
 ```
 
 ### Installation
