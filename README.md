@@ -83,3 +83,4 @@ sudo apt install mpv python3
 - **`player.py`**: The background controller. Spawns `mpv --idle` and connects via standard UNIX socket IPC. Sends serialized JSON commands and reads messages in an independent background thread.
 - **`visualizer.py`**: Renders the spectrum graph using overlapping mathematical wave expressions scaled in real-time by volume and pause state.
 - **`styles.css`**: Textual CSS styling sheet describing panel layouts, Gruvbox theme tokens, and transparency settings.
+# Melodix
