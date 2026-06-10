@@ -84,3 +84,4 @@ sudo apt install mpv python3
 - **`visualizer.py`**: Renders the spectrum graph using overlapping mathematical wave expressions scaled in real-time by volume and pause state.
 - **`styles.css`**: Textual CSS styling sheet describing panel layouts, Gruvbox theme tokens, and transparency settings.
 # Melodix
+# Melodix
