@@ -79,6 +79,7 @@ class MelodixApp(App):
         ("a",      "add_dir",        "Add Dir"),
         ("delete", "remove_track",   "Remove"),
         ("y",      "youtube_dl",     "YouTube DL"),
+        ("ctrl+r", "refresh_library", "Refresh Library"),
     ]
 
     # ── Reactives ──────────────────────────────────────────────────────────────
@@ -150,7 +151,8 @@ class MelodixApp(App):
                 f"  [{_BG2}]↑↓[/{_BG2}] vol  [{_BG2}]n/p[/{_BG2}] skip"
                 f"  [{_BG2}]s[/{_BG2}] shuffle  [{_BG2}]r[/{_BG2}] repeat"
                 f"  [{_BG2}]a[/{_BG2}] add-dir  [{_BG2}]Del[/{_BG2}] remove"
-                f"  [{_BG2}]f/l[/{_BG2}] focus  [{_BG2}]y[/{_BG2}][bold {_ORG}] YT↓[/]  [{_BG2}]q[/{_BG2}] quit[/{_FG3}]",
+                f"  [{_BG2}]f/l[/{_BG2}] focus  [{_BG2}]y[/{_BG2}][bold {_ORG}] YT↓[/]"
+                f"  [{_BG2}]^R[/{_BG2}] refresh  [{_BG2}]q[/{_BG2}] quit[/{_FG3}]",
                 id="keys-hint",
             )
 
@@ -489,6 +491,17 @@ class MelodixApp(App):
 
     def action_toggle_repeat(self) -> None:
         self.repeat_mode = {"none": "track", "track": "all", "all": "none"}[self.repeat_mode]
+
+    async def action_refresh_library(self) -> None:
+        """Reload the directory tree in-place (Ctrl+R) without restarting."""
+        try:
+            tree = self.query_one("#dir-tree", AudioDirectoryTree)
+            panel = self.query_one("#browser-panel")
+            panel.border_title = f"[bold {_YEL}]󰉋 Library  ↻ refreshing…[/]"
+            await tree.reload()
+            panel.border_title = "󰉋 Library"
+        except Exception:
+            pass
 
     def action_add_dir(self) -> None:
         try:
