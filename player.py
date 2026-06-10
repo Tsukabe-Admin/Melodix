@@ -1,17 +1,18 @@
 import json
 import os
+import shutil
 import socket
 import subprocess
+import tempfile
 import threading
 import time
 from typing import Callable, Optional, Dict, Any
 
 class MpvPlayer:
     def __init__(self, workspace_path: str):
-        self.workspace_path = workspace_path
-        self.tmp_dir = os.path.join(workspace_path, ".tmp")
-        os.makedirs(self.tmp_dir, exist_ok=True)
-        
+        # Use a proper system temp dir so the socket works from any CWD
+        # (important when running as an installed package via `melodix`)
+        self.tmp_dir = tempfile.mkdtemp(prefix="melodix-")
         self.socket_path = os.path.join(self.tmp_dir, f"mpv_{os.getpid()}.sock")
         self.proc: Optional[subprocess.Popen] = None
         self.client: Optional[socket.socket] = None
@@ -43,18 +44,25 @@ class MpvPlayer:
                 pass
                 
         # Launch mpv with remote IPC enabled, disabling video window and terminal output
-        self.proc = subprocess.Popen(
-            [
-                "mpv",
-                "--idle",
-                "--no-video",
-                f"--input-ipc-server={self.socket_path}",
-                "--input-terminal=no",
-                "--terminal=no",
-            ],
-            stdout=subprocess.DEVNULL,
-            stderr=subprocess.DEVNULL,
-        )
+        try:
+            self.proc = subprocess.Popen(
+                [
+                    "mpv",
+                    "--idle",
+                    "--no-video",
+                    f"--input-ipc-server={self.socket_path}",
+                    "--input-terminal=no",
+                    "--terminal=no",
+                ],
+                stdout=subprocess.DEVNULL,
+                stderr=subprocess.DEVNULL,
+            )
+        except FileNotFoundError:
+            raise RuntimeError(
+                "mpv not found. Please install it first:\n"
+                "  Arch:   sudo pacman -S mpv\n"
+                "  Debian: sudo apt install mpv"
+            )
         
         # Wait for the Unix socket to be created
         retries = 20
@@ -193,8 +201,8 @@ class MpvPlayer:
         self._send_command("set_property", "volume", level)
 
     def toggle_mute(self):
-        """Toggles mute state."""
-        self._send_command("set_property", "mute", not self.mute)
+        """Toggles mute state using mpv's native cycle to avoid race conditions."""
+        self._send_command("cycle", "mute")
 
     def stop(self):
         """Stops playback."""
@@ -209,6 +217,8 @@ class MpvPlayer:
         self.running = False
         if self.client:
             try:
+                # Shutdown unblocks the reader thread which is blocked on recv()
+                self.client.shutdown(socket.SHUT_RDWR)
                 self.client.close()
             except Exception:
                 pass
@@ -221,8 +231,8 @@ class MpvPlayer:
                     self.proc.kill()
                 except Exception:
                     pass
-        if os.path.exists(self.socket_path):
-            try:
-                os.unlink(self.socket_path)
-            except OSError:
-                pass
+        # Clean up the temporary directory (socket file + dir)
+        try:
+            shutil.rmtree(self.tmp_dir, ignore_errors=True)
+        except Exception:
+            pass

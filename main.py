@@ -4,6 +4,9 @@ import random
 from pathlib import Path
 from typing import Iterable, List, Dict, Any
 
+# Absolute path so the CSS loads correctly from any working directory
+_APP_DIR = Path(__file__).parent
+
 from textual.app import App, ComposeResult
 from textual.containers import Horizontal, Vertical
 from textual.widgets import Button, Label, DirectoryTree, DataTable, ProgressBar
@@ -55,7 +58,7 @@ class AudioDirectoryTree(DirectoryTree):
 class MelodixApp(App):
     """Melodix — btop-style terminal music player (Gruvbox theme)."""
 
-    CSS_PATH = "styles.css"
+    CSS_PATH = _APP_DIR / "styles.css"
     TITLE    = "Melodix"
 
     BINDINGS = [
@@ -463,8 +466,10 @@ class MelodixApp(App):
     def action_quit_app(self)       -> None: self.player.close(); self.exit()
     def action_toggle_play(self)    -> None:
         if self.current_index != -1: self.player.toggle_pause()
-    def action_seek_forward(self)   -> None: self.player.seek(5)
-    def action_seek_backward(self)  -> None: self.player.seek(-5)
+    def action_seek_forward(self)   -> None:
+        if self.current_index != -1: self.player.seek(5)
+    def action_seek_backward(self)  -> None:
+        if self.current_index != -1: self.player.seek(-5)
     def action_volume_up(self)      -> None: self.player.set_volume(self.player.volume + 5)
     def action_volume_down(self)    -> None: self.player.set_volume(self.player.volume - 5)
     def action_next_track(self)     -> None: self._next()

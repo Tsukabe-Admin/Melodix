@@ -7,7 +7,7 @@ name = "melodix"
 version = "1.0.0"
 description = "Melodix — btop-style terminal music player"
 readme = "README.md"
-requires-python = ">=3.7"
+requires-python = ">=3.9"
 dependencies = [
     "textual>=8.0.0",
     "rich>=13.0.0",

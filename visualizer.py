@@ -27,7 +27,7 @@ class AudioVisualizer(Widget):
 
     def _tick(self) -> None:
         if self.is_playing:
-            self.phase += 0.11
+            self.phase = (self.phase + 0.11) % (2 * math.pi * 100)  # prevent float drift
             for i in range(self.num_bars):
                 w1 = math.sin(self.phase       + i * 0.30)
                 w2 = math.cos(self.phase * 0.5 - i * 0.18)
