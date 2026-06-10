@@ -516,10 +516,11 @@ class MelodixApp(App):
         """Open the YouTube download modal."""
         self.push_screen(YoutubeScreen(), self._on_yt_download_done)
 
-    def _on_yt_download_done(self, path: str | None) -> None:
-        """Called when the YouTube modal dismisses. Adds the MP3 to queue."""
-        if path:
-            self.add_to_queue(path)
+    def _on_yt_download_done(self, paths: list | None) -> None:
+        """Called when the YouTube modal dismisses. Adds each downloaded MP3 to queue."""
+        if paths:
+            for path in paths:
+                self.add_to_queue(path)
 
     def action_remove_track(self) -> None:
         try:

@@ -253,7 +253,7 @@ YoutubeScreen {
 }
 
 #yt-dialog {
-    width: 72;
+    width: 76;
     height: auto;
     background: $bg;
     border: round $orange;
@@ -286,6 +286,54 @@ YoutubeScreen {
     border: tall $yellow;
 }
 
+/* Per-track progress */
+#yt-track-label {
+    height: 1;
+    color: $blue;
+    margin-bottom: 0;
+}
+
+#yt-track-progress {
+    width: 100%;
+    height: 1;
+    margin-bottom: 1;
+}
+
+#yt-track-progress > .bar--bar {
+    background: $bg2;
+    color: $bg2;
+}
+
+#yt-track-progress > .bar--complete {
+    background: $orange;
+    color: $orange;
+}
+
+/* Overall playlist progress (hidden until playlist detected) */
+#yt-overall-label {
+    height: 1;
+    color: $fg3;
+    margin-bottom: 0;
+    margin-top: 0;
+}
+
+#yt-overall-progress {
+    width: 100%;
+    height: 1;
+    margin-bottom: 1;
+}
+
+#yt-overall-progress > .bar--bar {
+    background: $bg2;
+    color: $bg2;
+}
+
+#yt-overall-progress > .bar--complete {
+    background: $yellow;
+    color: $yellow;
+}
+
+/* Status line */
 #yt-status {
     height: 2;
     text-align: center;
@@ -293,22 +341,7 @@ YoutubeScreen {
     margin-bottom: 0;
 }
 
-#yt-progress {
-    width: 100%;
-    height: 1;
-    margin-bottom: 1;
-}
-
-#yt-progress > .bar--bar {
-    background: $bg2;
-    color: $bg2;
-}
-
-#yt-progress > .bar--complete {
-    background: $orange;
-    color: $orange;
-}
-
+/* Buttons */
 #yt-buttons {
     layout: horizontal;
     height: 3;
