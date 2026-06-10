@@ -1,0 +1,246 @@
+/* ══════════════════════════════════════════════════════════════════════
+   Gruvbox Dark Hard  —  btop-inspired panel layout
+   ══════════════════════════════════════════════════════════════════════ */
+
+/* ── Palette ─────────────────────────────────────────────────────────── */
+$bg:     #1d2021;
+$bg0:    #282828;
+$bg1:    #3c3836;
+$bg2:    #504945;
+$bg3:    #665c54;
+$bg4:    #7c6f64;
+$fg:     #ebdbb2;
+$fg1:    #d5c4a1;
+$fg2:    #bdae93;
+$fg3:    #a89984;
+$red:    #fb4934;
+$green:  #b8bb26;
+$yellow: #fabd2f;
+$blue:   #83a598;
+$purple: #d3869b;
+$aqua:   #8ec07c;
+$orange: #fe8019;
+$gray:   #928374;
+
+$bg_glass: rgba(40, 40, 40, 0.35);
+
+/* ── Root ────────────────────────────────────────────────────────────── */
+Screen {
+    background: transparent;
+    color: $fg;
+    layout: vertical;
+}
+
+/* ── Header status bar ───────────────────────────────────────────────── */
+#header-bar {
+    height: 1;
+    background: transparent;
+    color: $fg;
+    padding: 0 1;
+    border-bottom: solid $bg2;
+}
+
+/* ── Main split pane ─────────────────────────────────────────────────── */
+#main-pane {
+    layout: horizontal;
+    height: 1fr;
+    padding: 0;
+}
+
+/* ── Library / Browser panel ─────────────────────────────────────────── */
+#browser-panel {
+    width: 38;
+    height: 100%;
+    background: transparent;
+    border: round $blue;
+    border-title-color: $blue;
+    border-title-style: bold;
+    border-title-align: left;
+    layout: vertical;
+    margin: 0 1 0 0;
+}
+
+#dir-tree {
+    height: 1fr;
+    background: transparent;
+    border: none;
+    padding: 0 1;
+    scrollbar-color: $bg3;
+    scrollbar-color-hover: $bg4;
+}
+
+#dir-tree:focus {
+    border: none;
+    background: transparent;
+}
+
+/* Tree node styling */
+DirectoryTree > .tree--cursor {
+    background: $bg2;
+    color: $yellow;
+    text-style: bold;
+}
+
+DirectoryTree > .tree--highlight {
+    background: $bg1;
+}
+
+DirectoryTree .tree--guides {
+    color: $bg3;
+}
+
+DirectoryTree .tree--guides-hover {
+    color: $gray;
+}
+
+/* ── Queue panel ─────────────────────────────────────────────────────── */
+#queue-panel {
+    width: 1fr;
+    height: 100%;
+    background: transparent;
+    border: round $yellow;
+    border-title-color: $yellow;
+    border-title-style: bold;
+    border-title-align: left;
+    layout: vertical;
+}
+
+#queue-list {
+    height: 1fr;
+    background: transparent;
+    border: none;
+    padding: 0 0;
+    scrollbar-color: $bg3;
+    scrollbar-color-hover: $bg4;
+}
+
+#queue-list:focus {
+    border: none;
+}
+
+DataTable > .datatable--cursor {
+    background: $bg2;
+    color: $yellow;
+    text-style: bold;
+}
+
+DataTable > .datatable--header {
+    background: $bg1;
+    color: $gray;
+    text-style: bold;
+}
+
+DataTable > .datatable--hover {
+    background: $bg1;
+}
+
+/* ── Bottom player bar ───────────────────────────────────────────────── */
+#bottom-bar {
+    height: 11;
+    background: transparent;
+    border: round $orange;
+    border-title-color: $orange;
+    border-title-style: bold;
+    border-title-align: left;
+    layout: vertical;
+    margin-top: 0;
+}
+
+/* Visualizer */
+#visualizer {
+    height: 5;
+    width: 100%;
+    background: transparent;
+    border-bottom: solid $bg2;
+}
+
+/* Transport controls row */
+#controls-row {
+    height: 1;
+    background: transparent;
+    align: left middle;
+    padding: 0 1;
+    border-bottom: solid $bg2;
+}
+
+.ctrl-btn {
+    background: transparent;
+    border: none;
+    color: $fg2;
+    min-width: 4;
+    height: 1;
+    padding: 0 1;
+}
+
+.ctrl-btn:hover {
+    color: $yellow;
+    background: $bg1;
+}
+
+.ctrl-btn.-on {
+    color: $orange;
+    text-style: bold;
+}
+
+.ctrl-sep {
+    color: $bg3;
+    width: 2;
+    height: 1;
+    content-align: center middle;
+}
+
+.ctrl-label {
+    color: $gray;
+    height: 1;
+    padding: 0 0;
+}
+
+#volume-display {
+    color: $aqua;
+    text-style: bold;
+    width: 5;
+}
+
+#vol-bar {
+    height: 1;
+    padding: 0 1;
+}
+
+/* Progress row */
+#progress-row {
+    height: 1;
+    background: transparent;
+    align: center middle;
+    padding: 0 1;
+    border-bottom: solid $bg2;
+}
+
+.time-label {
+    width: 7;
+    color: $gray;
+    text-align: center;
+    height: 1;
+}
+
+#progress-bar {
+    width: 1fr;
+    height: 1;
+}
+
+#progress-bar > .bar--bar {
+    background: $bg2;
+    color: $bg2;
+}
+
+#progress-bar > .bar--complete {
+    background: $aqua;
+    color: $aqua;
+}
+
+/* Keys hint row */
+#keys-hint {
+    height: 1;
+    background: transparent;
+    color: $fg3;
+    padding: 0 1;
+}

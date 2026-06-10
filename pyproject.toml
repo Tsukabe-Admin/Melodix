@@ -1,0 +1,23 @@
+[build-system]
+requires = ["setuptools>=61.0.0"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "melodix"
+version = "1.0.0"
+description = "Melodix — btop-style terminal music player"
+readme = "README.md"
+requires-python = ">=3.7"
+dependencies = [
+    "textual>=8.0.0",
+    "rich>=13.0.0",
+]
+
+[project.scripts]
+melodix = "main:run_app"
+
+[tool.setuptools]
+py-modules = ["main", "player", "visualizer"]
+
+[tool.setuptools.package-data]
+"*" = ["styles.css"]

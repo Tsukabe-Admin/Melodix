@@ -1,0 +1,85 @@
+# 󰓎 Melodix
+
+Melodix is a premium, modern, and highly customized Terminal User Interface (TUI) music player for Linux, built using Python's modern **Textual** framework and powered by the **mpv** audio engine via IPC sockets. It is designed to match system monitors like `btop` with a rich **Gruvbox dark** theme, rounded panel layouts, transparent glassmorphism, and a custom procedural audio visualizer.
+
+![Melodix Preview](https://raw.githubusercontent.com/username/repository/main/assets/preview.png) *(Placeholder for preview)*
+
+---
+
+## ✨ Features
+
+- **Translucent Glassmorphism**: Complete `transparent` background architecture, allowing your native terminal wallpaper/opacity to shine directly through the panels.
+- **btop Aesthetic**: Dense grid layouts, color-coded sections (Blue for Library, Yellow for Queue, Orange for Controls), and rounded corner styles (`border: round`).
+- **Interactive File Library**: Tree-based navigation starting in `~/Music` by default. Hitting `Enter` on any audio file instantly appends it to the active queue.
+- **Glassmorphic Spectrum Visualizer**:
+  - Vertical color gradients matching the btop graph look.
+  - Frosted glass textures using shaded block characters (`░`, `▒`, `▓`, `█`).
+  - Dynamic diagonal reflection highlights (`╱`) and white gloss sheens simulating light reflecting off glass.
+- **Robust IPC Backend**: Controls a background-spawned `mpv` process asynchronously using standard JSON-RPC command sockets.
+- **Keyboard & Mouse Friendly**: Complete hotkeys for mouse-free operation, plus clickable transport and volume controls.
+- **Fully Packaged**: Modern PEP-517 setup via `pyproject.toml` for standard system installations.
+
+---
+
+## 🎹 Keyboard Shortcuts
+
+| Hotkey | Action |
+| :--- | :--- |
+| `Space` | Play / Pause |
+| `Left` / `Right` | Seek backward / forward 5 seconds |
+| `Up` / `Down` | Increase / decrease volume by 5% |
+| `N` | Next track in queue |
+| `P` | Previous track in queue |
+| `S` | Toggle Shuffle mode |
+| `R` | Toggle Repeat mode (`none` 󰓛 -> `track` 󰑘 -> `all` 󰑖) |
+| `M` | Mute / Unmute audio |
+| `F` | Focus File Browser |
+| `L` | Focus Active Queue |
+| `A` | Add selected directory to Queue |
+| `Delete` | Remove selected track from Queue |
+| `Q` | Quit Melodix Player |
+
+---
+
+## 🚀 Installation & Setup
+
+### Prerequisites
+
+Ensure you have python (>= 3.7) and `mpv` installed on your system.
+```bash
+# Arch Linux
+sudo pacman -S mpv python
+
+# Debian/Ubuntu
+sudo apt install mpv python3
+```
+
+### Installation
+
+1. Clone this repository:
+   ```bash
+   git clone https://github.com/yourusername/melodix.git
+   cd melodix
+   ```
+2. Build and install locally:
+   ```bash
+   pip install .
+   ```
+   *Alternatively, you can install it in edit/developer mode:*
+   ```bash
+   pip install -e .
+   ```
+
+3. Launch it directly:
+   ```bash
+   melodix
+   ```
+
+---
+
+## 🛠 Architecture
+
+- **`main.py`**: The entrypoint and Textual App controller. Manages UI mounts, event loops, reactive properties, and links keys to player actions.
+- **`player.py`**: The background controller. Spawns `mpv --idle` and connects via standard UNIX socket IPC. Sends serialized JSON commands and reads messages in an independent background thread.
+- **`visualizer.py`**: Renders the spectrum graph using overlapping mathematical wave expressions scaled in real-time by volume and pause state.
+- **`styles.css`**: Textual CSS styling sheet describing panel layouts, Gruvbox theme tokens, and transparency settings.
