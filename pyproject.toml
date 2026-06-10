@@ -17,7 +17,7 @@ dependencies = [
 melodix = "main:run_app"
 
 [tool.setuptools]
-py-modules = ["main", "player", "visualizer"]
+py-modules = ["main", "player", "visualizer", "downloader", "youtube_screen"]
 
 [tool.setuptools.package-data]
 "*" = ["styles.css"]

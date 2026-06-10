@@ -15,6 +15,7 @@ from rich.text import Text
 
 from player import MpvPlayer
 from visualizer import AudioVisualizer
+from youtube_screen import YoutubeScreen
 
 # ── Gruvbox palette constants (for Rich markup) ────────────────────────────────
 _YEL  = "#fabd2f"   # yellow  – primary accent / active
@@ -77,6 +78,7 @@ class MelodixApp(App):
         ("l",      "focus_queue",    "Queue"),
         ("a",      "add_dir",        "Add Dir"),
         ("delete", "remove_track",   "Remove"),
+        ("y",      "youtube_dl",     "YouTube DL"),
     ]
 
     # ── Reactives ──────────────────────────────────────────────────────────────
@@ -148,7 +150,7 @@ class MelodixApp(App):
                 f"  [{_BG2}]↑↓[/{_BG2}] vol  [{_BG2}]n/p[/{_BG2}] skip"
                 f"  [{_BG2}]s[/{_BG2}] shuffle  [{_BG2}]r[/{_BG2}] repeat"
                 f"  [{_BG2}]a[/{_BG2}] add-dir  [{_BG2}]Del[/{_BG2}] remove"
-                f"  [{_BG2}]f/l[/{_BG2}] focus  [{_BG2}]q[/{_BG2}] quit[/{_FG3}]",
+                f"  [{_BG2}]f/l[/{_BG2}] focus  [{_BG2}]y[/{_BG2}][bold {_ORG}] YT↓[/]  [{_BG2}]q[/{_BG2}] quit[/{_FG3}]",
                 id="keys-hint",
             )
 
@@ -496,6 +498,15 @@ class MelodixApp(App):
                 self.add_directory(str(node.data.path))
         except Exception:
             pass
+
+    def action_youtube_dl(self) -> None:
+        """Open the YouTube download modal."""
+        self.push_screen(YoutubeScreen(), self._on_yt_download_done)
+
+    def _on_yt_download_done(self, path: str | None) -> None:
+        """Called when the YouTube modal dismisses. Adds the MP3 to queue."""
+        if path:
+            self.add_to_queue(path)
 
     def action_remove_track(self) -> None:
         try:

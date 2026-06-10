@@ -244,3 +244,103 @@ DataTable > .datatable--hover {
     color: $fg3;
     padding: 0 1;
 }
+
+/* ── YouTube Download Modal ─────────────────────────────────────────────────── */
+
+YoutubeScreen {
+    align: center middle;
+    background: rgba(0,0,0,0.6);
+}
+
+#yt-dialog {
+    width: 72;
+    height: auto;
+    background: $bg;
+    border: round $orange;
+    padding: 1 2;
+}
+
+#yt-title {
+    text-align: center;
+    height: 2;
+    margin-bottom: 0;
+    color: $orange;
+}
+
+#yt-subtitle {
+    text-align: center;
+    height: 1;
+    margin-bottom: 1;
+    color: $fg3;
+}
+
+#yt-url-input {
+    width: 100%;
+    background: $bg1;
+    border: tall $bg2;
+    color: $fg;
+    margin-bottom: 1;
+}
+
+#yt-url-input:focus {
+    border: tall $yellow;
+}
+
+#yt-status {
+    height: 2;
+    text-align: center;
+    color: $fg3;
+    margin-bottom: 0;
+}
+
+#yt-progress {
+    width: 100%;
+    height: 1;
+    margin-bottom: 1;
+}
+
+#yt-progress > .bar--bar {
+    background: $bg2;
+    color: $bg2;
+}
+
+#yt-progress > .bar--complete {
+    background: $orange;
+    color: $orange;
+}
+
+#yt-buttons {
+    layout: horizontal;
+    height: 3;
+    align: center middle;
+    margin-top: 1;
+}
+
+#yt-btn-download {
+    background: $orange;
+    color: $bg;
+    border: none;
+    margin-right: 2;
+    min-width: 14;
+}
+
+#yt-btn-download:hover {
+    background: $yellow;
+}
+
+#yt-btn-download:disabled {
+    background: $bg2;
+    color: $fg3;
+}
+
+#yt-btn-cancel {
+    background: $bg2;
+    color: $fg3;
+    border: none;
+    min-width: 10;
+}
+
+#yt-btn-cancel:hover {
+    background: $bg3;
+    color: $fg;
+}
