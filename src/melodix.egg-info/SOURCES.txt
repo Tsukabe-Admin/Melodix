@@ -1,0 +1,16 @@
+MANIFEST.in
+README.md
+pyproject.toml
+src/melodix/__init__.py
+src/melodix/downloader.py
+src/melodix/main.py
+src/melodix/player.py
+src/melodix/styles.css
+src/melodix/visualizer.py
+src/melodix/youtube_screen.py
+src/melodix.egg-info/PKG-INFO
+src/melodix.egg-info/SOURCES.txt
+src/melodix.egg-info/dependency_links.txt
+src/melodix.egg-info/entry_points.txt
+src/melodix.egg-info/requires.txt
+src/melodix.egg-info/top_level.txt

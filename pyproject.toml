@@ -15,10 +15,11 @@ dependencies = [
 ]
 
 [project.scripts]
-melodix = "main:run_app"
+melodix = "melodix.main:run_app"
 
 [tool.setuptools]
-py-modules = ["main", "player", "visualizer", "downloader", "youtube_screen"]
+package-dir = {"" = "src"}
+packages = ["melodix"]
 
 [tool.setuptools.package-data]
-"*" = ["styles.css"]
+"melodix" = ["styles.css"]

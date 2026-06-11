@@ -1,0 +1,15 @@
+MANIFEST.in
+README.md
+downloader.py
+main.py
+player.py
+pyproject.toml
+styles.css
+visualizer.py
+youtube_screen.py
+melodix.egg-info/PKG-INFO
+melodix.egg-info/SOURCES.txt
+melodix.egg-info/dependency_links.txt
+melodix.egg-info/entry_points.txt
+melodix.egg-info/requires.txt
+melodix.egg-info/top_level.txt

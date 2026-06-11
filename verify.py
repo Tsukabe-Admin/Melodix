@@ -7,12 +7,15 @@ def verify_all():
     current_dir = os.path.dirname(os.path.abspath(__file__))
     print(f"Current Directory: {current_dir}")
     
+    # Add src to python path for testing
+    sys.path.insert(0, os.path.join(current_dir, "src"))
+
     # 1. Check imports
     print("\n[1/4] Verifying imports...")
     try:
-        import player
-        import visualizer
-        import main
+        from melodix import player
+        from melodix import visualizer
+        from melodix import main
         print("✓ Imports verified successfully.")
     except Exception as e:
         print(f"✗ Import verification failed: {e}")
@@ -20,7 +23,7 @@ def verify_all():
         
     # 2. Check css file
     print("\n[2/4] Verifying CSS stylesheet...")
-    css_path = os.path.join(current_dir, "styles.css")
+    css_path = os.path.join(current_dir, "src", "melodix", "styles.css")
     if os.path.exists(css_path):
         print(f"✓ Stylesheet exists at {css_path}")
     else:
