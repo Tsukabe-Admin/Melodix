@@ -71,6 +71,9 @@ class MelodixApp(App):
         ("right",  "seek_forward",   "Seek +5s"),
         ("up",     "volume_up",      "Vol +5"),
         ("down",   "volume_down",    "Vol -5"),
+        ("+",      "volume_up",      "Vol +5"),
+        ("=",      "volume_up",      "Vol +5"),
+        ("-",      "volume_down",    "Vol -5"),
         ("n",      "next_track",     "Next"),
         ("p",      "prev_track",     "Prev"),
         ("s",      "toggle_shuffle", "Shuffle"),
@@ -153,7 +156,7 @@ class MelodixApp(App):
             # One-liner keybindings reference
             yield Label(
                 f"[{_BG2}]SPC[/{_BG2}][{_FG3}] play  [{_BG2}]←→[/{_BG2}] seek"
-                f"  [{_BG2}]↑↓[/{_BG2}] vol  [{_BG2}]n/p[/{_BG2}] skip"
+                f"  [{_BG2}]+/-[/{_BG2}] vol  [{_BG2}]n/p[/{_BG2}] skip"
                 f"  [{_BG2}]s[/{_BG2}] shuffle  [{_BG2}]r[/{_BG2}] repeat"
                 f"  [{_BG2}]a[/{_BG2}] add-dir  [{_BG2}]⇧Ent[/{_BG2}] play-selected"
                 f"  [{_BG2}]b[/{_BG2}] add-to-pl  [{_BG2}]o[/{_BG2}] playlists"
