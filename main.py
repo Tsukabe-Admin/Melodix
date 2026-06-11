@@ -291,6 +291,13 @@ class MelodixApp(App):
             self.query_one("#progress-bar", ProgressBar).progress = 0
         except Exception:
             pass
+        self.play_icon = "󰏤"
+        try:
+            self.query_one("#visualizer", AudioVisualizer).set_state(
+                True, self.player.volume
+            )
+        except Exception:
+            pass
         self._refresh_queue()
         self._refresh_header()
 
