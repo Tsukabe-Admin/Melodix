@@ -3,11 +3,11 @@ import random
 from textual.widget import Widget
 from rich.text import Text
 
-# Gruvbox palette for the visualizer
-_LOW  = "#8ec07c"   # aqua   – quiet
-_MID  = "#fabd2f"   # yellow – medium
-_HIGH = "#fb4934"   # red    – loud
-_EMPTY = "#3c3836"  # bg1    – inactive bar cell
+# Liquid Glass palette for the visualizer
+_LOW  = "#00f0ff"   # Neon Cyan   – quiet
+_MID  = "#00c6ff"   # Electric Blue – medium
+_HIGH = "#ff007f"   # Neon Pink   – loud
+_EMPTY = "#1e2238"  # Slate       – inactive bar cell
 
 
 class AudioVisualizer(Widget):
@@ -90,10 +90,10 @@ class AudioVisualizer(Widget):
 
                     # Apply reflection sheen highlight on the bar itself
                     if is_sheen:
-                        style = "bold #ffffff on #504945"
+                        style = "bold #ffffff on #475569"
                         ch = "█"
                     elif is_sheen_soft:
-                        style = f"bold #ebdbb2"
+                        style = f"bold #cbd5e1"
                     else:
                         style = f"bold {color}"
 
@@ -101,9 +101,9 @@ class AudioVisualizer(Widget):
                 else:
                     # Empty cells / Transparent glass pane representation
                     if is_sheen:
-                        text.append("╱", style="bold #504945")
+                        text.append("╱", style="bold #3b4261")
                     elif is_sheen_soft:
-                        text.append("·", style="bold #3c3836")
+                        text.append("·", style="bold #232742")
                     else:
                         text.append(" ", style=_EMPTY)
 

@@ -19,20 +19,20 @@ from .youtube_screen import YoutubeScreen
 from .add_to_playlist import AddToPlaylistScreen
 from .playlists_screen import PlaylistScreen
 
-# ── Gruvbox palette constants (for Rich markup) ────────────────────────────────
-_YEL  = "#fabd2f"   # yellow  – primary accent / active
-_BLU  = "#83a598"   # blue    – info / secondary
-_GRN  = "#b8bb26"   # green   – playing / positive
-_RED  = "#fb4934"   # red     – alert / peak
-_ORG  = "#fe8019"   # orange  – toggles / warnings
-_AQU  = "#8ec07c"   # aqua    – volume / progress
-_FG   = "#ebdbb2"   # fg      – primary text
-_FG1  = "#d5c4a1"   # fg1     – secondary text
-_FG3  = "#a89984"   # fg3     – dimmed / labels
-_BG2  = "#504945"   # bg2     – separators
-_BG3  = "#665c54"   # bg3     – inactive borders
-_PUR  = "#d3869b"   # purple  – metadata accent
-_GRY  = "#928374"   # gray    – muted
+# ── Liquid Glass palette constants (for Rich markup) ───────────────────────────
+_YEL  = "#00f0ff"   # Neon Cyan   – primary accent / active
+_BLU  = "#00c6ff"   # Electric Blue – info / secondary
+_GRN  = "#39ff14"   # Neon Green  – playing / positive
+_RED  = "#ff007f"   # Neon Pink   – alert / peak
+_ORG  = "#a100ff"   # Neon Purple – toggles / warnings
+_AQU  = "#00f0ff"   # Cyan        – volume / progress
+_FG   = "#e2e8f0"   # slate-200   – primary text
+_FG1  = "#cbd5e1"   # slate-300   – secondary text
+_FG3  = "#94a3b8"   # slate-400   – dimmed / labels
+_BG2  = "#334155"   # slate-700   – separators
+_BG3  = "#475569"   # slate-600   – inactive borders
+_PUR  = "#bd00ff"   # Violet      – metadata accent
+_GRY  = "#64748b"   # slate-500   – muted
 
 AUDIO_EXTS = {".mp3", ".m4a", ".ogg", ".flac", ".wav", ".mp4",
               ".aac", ".webm", ".opus", ".wma"}
