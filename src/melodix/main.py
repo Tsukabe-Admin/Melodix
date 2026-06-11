@@ -82,6 +82,7 @@ class MelodixApp(App):
         ("delete", "remove_track",   "Remove"),
         ("b",      "add_to_playlist", "Add to PL"),
         ("o",      "open_playlists", "Playlists"),
+        ("shift+enter", "play_selected", "Play Selected"),
         ("y",      "youtube_dl",     "YouTube DL"),
         ("ctrl+r", "refresh_library", "Refresh Library"),
     ]
@@ -154,7 +155,7 @@ class MelodixApp(App):
                 f"[{_BG2}]SPC[/{_BG2}][{_FG3}] play  [{_BG2}]←→[/{_BG2}] seek"
                 f"  [{_BG2}]↑↓[/{_BG2}] vol  [{_BG2}]n/p[/{_BG2}] skip"
                 f"  [{_BG2}]s[/{_BG2}] shuffle  [{_BG2}]r[/{_BG2}] repeat"
-                f"  [{_BG2}]a[/{_BG2}] add-dir  [{_BG2}]Del[/{_BG2}] remove"
+                f"  [{_BG2}]a[/{_BG2}] add-dir  [{_BG2}]⇧Ent[/{_BG2}] play-selected"
                 f"  [{_BG2}]b[/{_BG2}] add-to-pl  [{_BG2}]o[/{_BG2}] playlists"
                 f"  [{_BG2}]f/l[/{_BG2}] focus  [{_BG2}]y[/{_BG2}][bold {_ORG}] YT↓[/]"
                 f"  [{_BG2}]^R[/{_BG2}] refresh  [{_BG2}]q[/{_BG2}] quit[/{_FG3}]",
@@ -605,6 +606,46 @@ class MelodixApp(App):
 
         if track:
             self.push_screen(AddToPlaylistScreen(track))
+
+    def action_play_selected(self) -> None:
+        """Play the currently highlighted folder or file immediately."""
+        try:
+            tree = self.query_one("#dir-tree", AudioDirectoryTree)
+            if tree.has_focus:
+                node = tree.cursor_node
+                if node and node.data:
+                    path = str(node.data.path)
+                    if node.data.path.is_dir():
+                        # Play folder: Clear queue, walk/add all tracks, play first
+                        self._stop_and_reset()
+                        self.queue.clear()
+                        self._refresh_queue()
+
+                        tracks_to_add = []
+                        for root, _, files in os.walk(path):
+                            for fname in sorted(files):
+                                if Path(fname).suffix.lower() in AUDIO_EXTS:
+                                    tracks_to_add.append(os.path.join(root, fname))
+
+                        if tracks_to_add:
+                            for track_path in tracks_to_add:
+                                title = os.path.splitext(os.path.basename(track_path))[0]
+                                self.queue.append({
+                                    "path": track_path, "title": title,
+                                    "artist": "", "duration": "--:--", "duration_sec": 0,
+                                })
+                            self._refresh_queue()
+                            self._update_queue_border_title()
+                            self.play_index(0)
+                    else:
+                        # Play file: Clear queue, add track, play it
+                        if Path(path).suffix.lower() in AUDIO_EXTS:
+                            self._stop_and_reset()
+                            self.queue.clear()
+                            self._refresh_queue()
+                            self.add_to_queue(path)
+        except Exception:
+            pass
 
     # ── Widget events ──────────────────────────────────────────────────────────
 
