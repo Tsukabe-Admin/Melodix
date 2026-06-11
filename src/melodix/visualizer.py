@@ -62,7 +62,7 @@ class AudioVisualizer(Widget):
                 src = int(i * self.num_bars / num_display)
                 bar_h = self.heights[src]
 
-                # Diagonal glass sheen highlight calculation
+                # Diagonal sheen highlight calculation
                 sheen_val = (i - row * 2) % 25
                 is_sheen = sheen_val in (0, 1)
                 is_sheen_soft = sheen_val in (2, 24)
@@ -77,7 +77,7 @@ class AudioVisualizer(Widget):
                     else:
                         color = _HIGH
 
-                    # Frosted glass texturing based on depth from top of bar
+                    # Textured gradient based on depth from top of bar
                     dist_from_top = bar_h - threshold
                     if dist_from_top < 0.15:
                         ch = "░"
@@ -99,7 +99,7 @@ class AudioVisualizer(Widget):
 
                     text.append(ch, style=style)
                 else:
-                    # Empty cells / Transparent glass pane representation
+                    # Empty cells / Transparent background representation
                     if is_sheen:
                         text.append("╱", style="bold #504945")
                     elif is_sheen_soft:

@@ -10,7 +10,7 @@ Requires-Dist: yt-dlp
 
 # 󰓎 Melodix
 
-Melodix is a premium, modern, and highly customized Terminal User Interface (TUI) music player for Linux, built using Python's modern **Textual** framework and powered by the **mpv** audio engine via IPC sockets. It is designed to match system monitors like `btop` with a rich **Gruvbox dark** theme, rounded panel layouts, transparent glassmorphism, and a custom procedural audio visualizer.
+Melodix is a premium, modern, and highly customized Terminal User Interface (TUI) music player for Linux, built using Python's modern **Textual** framework and powered by the **mpv** audio engine via IPC sockets. It is designed to match system monitors like `btop` with a rich **Gruvbox dark** theme, rounded panel layouts, transparent background integration, and a custom procedural audio visualizer.
 
 ![Melodix Preview](https://raw.githubusercontent.com/username/repository/main/assets/preview.png) *(Placeholder for preview)*
 
@@ -18,13 +18,13 @@ Melodix is a premium, modern, and highly customized Terminal User Interface (TUI
 
 ## ✨ Features
 
-- **Translucent Glassmorphism**: Complete `transparent` background architecture, allowing your native terminal wallpaper/opacity to shine directly through the panels.
+- **Terminal Transparency Integration**: Complete `ansi_default` background architecture, allowing your native terminal wallpaper/opacity to shine directly through the panels.
 - **btop Aesthetic**: Dense grid layouts, color-coded sections (Blue for Library, Yellow for Queue, Orange for Controls), and rounded corner styles (`border: round`).
 - **Interactive File Library**: Tree-based navigation starting in `~/Music` by default. Hitting `Enter` on any audio file instantly appends it to the active queue.
-- **Glassmorphic Spectrum Visualizer**:
+- **Procedural Spectrum Visualizer**:
   - Vertical color gradients matching the btop graph look.
-  - Frosted glass textures using shaded block characters (`░`, `▒`, `▓`, `█`).
-  - Dynamic diagonal reflection highlights (`╱`) and white gloss sheens simulating light reflecting off glass.
+  - Textured gradient animations using shaded block characters (`░`, `▒`, `▓`, `█`).
+  - Dynamic diagonal highlights (`╱`) and white glow sheens.
 - **Robust IPC Backend**: Controls a background-spawned `mpv` process asynchronously using standard JSON-RPC command sockets.
 - **Keyboard & Mouse Friendly**: Complete hotkeys for mouse-free operation, plus clickable transport and volume controls.
 - **Fully Packaged**: Modern PEP-517 setup via `pyproject.toml` for standard system installations.

@@ -22,11 +22,9 @@ $aqua:   #8ec07c;
 $orange: #fe8019;
 $gray:   #928374;
 
-$bg_glass: rgba(40, 40, 40, 0.35);
-
 /* ── Root ────────────────────────────────────────────────────────────── */
 Screen {
-    background: transparent;
+    background: ansi_default;
     color: $fg;
     layout: vertical;
 }
