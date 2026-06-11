@@ -377,3 +377,265 @@ YoutubeScreen {
     background: $bg3;
     color: $fg;
 }
+
+/* ── Add to Playlist Modal ──────────────────────────────────────────────────── */
+AddToPlaylistScreen {
+    align: center middle;
+    background: rgba(0,0,0,0.6);
+}
+
+#add-pl-dialog {
+    width: 60;
+    height: auto;
+    background: $bg;
+    border: round $aqua;
+    padding: 1 2;
+}
+
+#add-pl-title {
+    text-align: center;
+    height: 2;
+    color: $aqua;
+    text-style: bold;
+}
+
+#add-pl-track-info {
+    text-align: center;
+    color: $fg3;
+    height: 1;
+    margin-bottom: 1;
+}
+
+.add-pl-label {
+    color: $fg2;
+    margin-bottom: 0;
+    margin-top: 1;
+}
+
+#add-pl-list {
+    height: 6;
+    background: $bg1;
+    border: solid $bg2;
+    margin-bottom: 1;
+    scrollbar-color: $bg3;
+    scrollbar-color-hover: $bg4;
+}
+
+#add-pl-list ListItem {
+    color: $fg;
+    padding: 0 1;
+}
+
+#add-pl-list ListItem:hover {
+    background: $bg2;
+    color: $yellow;
+}
+
+#add-pl-list ListItem.--highlight {
+    background: $bg2;
+}
+
+#add-pl-new-row {
+    height: 3;
+    layout: horizontal;
+    align: center middle;
+    margin-bottom: 1;
+}
+
+#add-pl-new-input {
+    width: 1fr;
+    background: $bg1;
+    border: tall $bg2;
+    color: $fg;
+    margin-right: 1;
+}
+
+#add-pl-new-input:focus {
+    border: tall $yellow;
+}
+
+#add-pl-btn-create {
+    width: 12;
+    height: 3;
+    background: $aqua;
+    color: $bg;
+    border: none;
+}
+
+#add-pl-btn-create:hover {
+    background: $green;
+}
+
+#add-pl-actions {
+    layout: horizontal;
+    height: 3;
+    align: right middle;
+    margin-top: 1;
+}
+
+#add-pl-btn-cancel {
+    background: $bg2;
+    color: $fg3;
+    border: none;
+    width: 12;
+}
+
+#add-pl-btn-cancel:hover {
+    background: $bg3;
+    color: $fg;
+}
+
+/* ── Playlists Manager Screen ────────────────────────────────────────────────── */
+PlaylistScreen {
+    align: center middle;
+    background: rgba(0,0,0,0.6);
+}
+
+#pl-dialog {
+    width: 90;
+    height: 25;
+    background: $bg;
+    border: round $orange;
+    padding: 1 2;
+}
+
+#pl-title {
+    text-align: center;
+    height: 2;
+    color: $orange;
+    text-style: bold;
+}
+
+#pl-split-view {
+    height: 12;
+    layout: horizontal;
+    margin-bottom: 1;
+}
+
+#pl-left-panel {
+    width: 30;
+    height: 100%;
+    margin-right: 2;
+}
+
+#pl-list-label, #pl-preview-label {
+    height: 1;
+    color: $fg3;
+    margin-bottom: 0;
+}
+
+#pl-list {
+    height: 1fr;
+    background: $bg1;
+    border: solid $bg2;
+    scrollbar-color: $bg3;
+    scrollbar-color-hover: $bg4;
+}
+
+#pl-list ListItem {
+    color: $fg;
+    padding: 0 1;
+}
+
+#pl-list ListItem:hover {
+    background: $bg2;
+    color: $yellow;
+}
+
+#pl-list ListItem.--highlight {
+    background: $bg2;
+}
+
+#pl-right-panel {
+    width: 1fr;
+    height: 100%;
+}
+
+#pl-preview-table {
+    height: 1fr;
+    background: $bg1;
+    border: solid $bg2;
+    scrollbar-color: $bg3;
+    scrollbar-color-hover: $bg4;
+}
+
+#pl-save-row {
+    height: 3;
+    layout: horizontal;
+    align: center middle;
+    margin-bottom: 1;
+}
+
+#pl-save-input {
+    width: 1fr;
+    background: $bg1;
+    border: tall $bg2;
+    color: $fg;
+    margin-right: 1;
+}
+
+#pl-save-input:focus {
+    border: tall $yellow;
+}
+
+#pl-btn-save {
+    width: 16;
+    height: 3;
+    background: $blue;
+    color: $bg;
+    border: none;
+}
+
+#pl-btn-save:hover {
+    background: $yellow;
+}
+
+#pl-actions-row {
+    layout: horizontal;
+    height: 3;
+    align: right middle;
+    margin-top: 1;
+}
+
+#pl-actions-row Button {
+    margin-left: 1;
+    height: 3;
+    border: none;
+}
+
+#pl-btn-load {
+    background: $green;
+    color: $bg;
+}
+
+#pl-btn-load:hover {
+    background: $yellow;
+}
+
+#pl-btn-append {
+    background: $bg2;
+    color: $fg;
+}
+
+#pl-btn-append:hover {
+    background: $bg3;
+}
+
+#pl-btn-delete {
+    background: $red;
+    color: $fg;
+}
+
+#pl-btn-delete:hover {
+    background: #fb4934cc;
+}
+
+#pl-btn-close {
+    background: $bg3;
+    color: $fg;
+}
+
+#pl-btn-close:hover {
+    background: $bg4;
+}
+

@@ -16,6 +16,8 @@ from rich.text import Text
 from .player import MpvPlayer
 from .visualizer import AudioVisualizer
 from .youtube_screen import YoutubeScreen
+from .add_to_playlist import AddToPlaylistScreen
+from .playlists_screen import PlaylistScreen
 
 # ── Gruvbox palette constants (for Rich markup) ────────────────────────────────
 _YEL  = "#fabd2f"   # yellow  – primary accent / active
@@ -78,6 +80,8 @@ class MelodixApp(App):
         ("l",      "focus_queue",    "Queue"),
         ("a",      "add_dir",        "Add Dir"),
         ("delete", "remove_track",   "Remove"),
+        ("b",      "add_to_playlist", "Add to PL"),
+        ("o",      "open_playlists", "Playlists"),
         ("y",      "youtube_dl",     "YouTube DL"),
         ("ctrl+r", "refresh_library", "Refresh Library"),
     ]
@@ -151,6 +155,7 @@ class MelodixApp(App):
                 f"  [{_BG2}]↑↓[/{_BG2}] vol  [{_BG2}]n/p[/{_BG2}] skip"
                 f"  [{_BG2}]s[/{_BG2}] shuffle  [{_BG2}]r[/{_BG2}] repeat"
                 f"  [{_BG2}]a[/{_BG2}] add-dir  [{_BG2}]Del[/{_BG2}] remove"
+                f"  [{_BG2}]b[/{_BG2}] add-to-pl  [{_BG2}]o[/{_BG2}] playlists"
                 f"  [{_BG2}]f/l[/{_BG2}] focus  [{_BG2}]y[/{_BG2}][bold {_ORG}] YT↓[/]"
                 f"  [{_BG2}]^R[/{_BG2}] refresh  [{_BG2}]q[/{_BG2}] quit[/{_FG3}]",
                 id="keys-hint",
@@ -547,6 +552,59 @@ class MelodixApp(App):
                     self._update_queue_border_title()
         except Exception:
             pass
+
+    def action_open_playlists(self) -> None:
+        """Open the Playlists Manager modal screen."""
+        self.push_screen(PlaylistScreen(self.queue), self._on_playlist_dismissed)
+
+    def _on_playlist_dismissed(self, result: dict | None) -> None:
+        """Callback when the Playlists Manager is closed. Loads/appends tracks."""
+        if not result:
+            return
+        action = result.get("action")
+        tracks = result.get("tracks", [])
+        if action == "load":
+            self.queue = tracks
+            self._refresh_queue()
+            self._update_queue_border_title()
+            if self.queue:
+                self.play_index(0)
+        elif action == "append":
+            start_play = (len(self.queue) == 0)
+            self.queue.extend(tracks)
+            self._refresh_queue()
+            self._update_queue_border_title()
+            if start_play and self.queue:
+                self.play_index(0)
+
+    def action_add_to_playlist(self) -> None:
+        """Add the currently highlighted song (Library browser or Queue list) to a playlist."""
+        track = None
+        tree = self.query_one("#dir-tree", AudioDirectoryTree)
+        table = self.query_one("#queue-list", DataTable)
+
+        if tree.has_focus:
+            node = tree.cursor_node
+            if node and node.data and not node.data.path.is_dir():
+                path = str(node.data.path)
+                if Path(path).suffix.lower() in AUDIO_EXTS:
+                    title = os.path.splitext(os.path.basename(path))[0]
+                    track = {
+                        "path": path,
+                        "title": title,
+                        "artist": "",
+                        "duration": "--:--",
+                        "duration_sec": 0
+                    }
+        else:
+            # Default fallback to queue list selection
+            if table.cursor_row is not None and self.queue:
+                idx = table.cursor_row
+                if 0 <= idx < len(self.queue):
+                    track = self.queue[idx]
+
+        if track:
+            self.push_screen(AddToPlaylistScreen(track))
 
     # ── Widget events ──────────────────────────────────────────────────────────
 
