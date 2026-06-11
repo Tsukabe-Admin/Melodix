@@ -2,7 +2,7 @@
 
 Melodix is a premium, modern, and highly customized Terminal User Interface (TUI) music player for Linux, built using Python's modern **Textual** framework and powered by the **mpv** audio engine via IPC sockets. It is designed to match system monitors like `btop` with a rich **Gruvbox dark** theme, rounded panel layouts, transparent background integration, and a custom procedural audio visualizer.
 
-![Melodix Preview](https://raw.githubusercontent.com/username/repository/main/assets/preview.png) *(Placeholder for preview)*
+![Melodix Preview](https://cdn.discordapp.com/attachments/662288171240783895/1514714910565732533/image.png?ex=6a2c5fb0&is=6a2b0e30&hm=ea9a8cadf4d9b25186794157f7738887ce8bf516594ec6b3ff7ad9ff3cd165c4&) *(Placeholder for preview)*
 
 ---
 
