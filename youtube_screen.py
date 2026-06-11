@@ -57,14 +57,16 @@ class YoutubeScreen(ModalScreen[list[str] | None]):
                 f"[bold {_ORG}]󰗃  YouTube → MP3[/]",
                 id="yt-title",
             )
-            yield Label(
-                f"[{_FG3}]Paste a video or playlist URL, then press "
-                f"[bold {_YEL}]Enter[/].[/]",
-                id="yt-subtitle",
-            )
+            yield Label(f"[{_FG3}]Video / Playlist URL:[/]", id="yt-url-label")
             yield Input(
                 placeholder="https://www.youtube.com/watch?v=…  or  playlist?list=…",
                 id="yt-url-input",
+            )
+            yield Label(f"[{_FG3}]Save Directory:[/]", id="yt-dir-label")
+            yield Input(
+                value="~/Music/Melodix",
+                placeholder="~/Music/Melodix",
+                id="yt-dir-input",
             )
 
             # Per-track progress (always visible)
@@ -95,8 +97,7 @@ class YoutubeScreen(ModalScreen[list[str] | None]):
     # ── Input / Button events ──────────────────────────────────────────────────
 
     def on_input_submitted(self, event: Input.Submitted) -> None:
-        if event.input.id == "yt-url-input":
-            self._start_download()
+        self._start_download()
 
     def on_button_pressed(self, event: Button.Pressed) -> None:
         if event.button.id == "yt-btn-download":
@@ -121,13 +122,20 @@ class YoutubeScreen(ModalScreen[list[str] | None]):
             self._set_status(f"[{_RED}]Please enter a URL.[/]")
             return
 
+        out_dir = self.query_one("#yt-dir-input", Input).value.strip()
+        if not out_dir:
+            self._set_status(f"[{_RED}]Please enter a save directory.[/]")
+            return
+
         self.query_one("#yt-url-input", Input).disabled = True
+        self.query_one("#yt-dir-input", Input).disabled = True
         self.query_one("#yt-btn-download", Button).disabled = True
         self._set_status(f"[{_BLU}]Starting…[/]")
         self._set_track_progress(0, "Fetching info…")
 
         self._job = download_url(
             url,
+            output_dir=out_dir,
             on_progress=self._cb_progress,
             on_done=self._cb_item_done,
             on_all_done=self._cb_all_done,
@@ -212,9 +220,10 @@ class YoutubeScreen(ModalScreen[list[str] | None]):
     def _on_error_ui(self, msg: str) -> None:
         self._set_track_progress(0, "")
         self._set_status(f"[bold {_RED}]✗  Error:[/]  [{_FG}]{msg}[/]")
-        # Re-enable so the user can correct the URL and try again
+        # Re-enable so the user can correct the URL/dir and try again
         try:
             self.query_one("#yt-url-input", Input).disabled = False
+            self.query_one("#yt-dir-input", Input).disabled = False
             self.query_one("#yt-btn-download", Button).disabled = False
         except Exception:
             pass

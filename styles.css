@@ -267,14 +267,14 @@ YoutubeScreen {
     color: $orange;
 }
 
-#yt-subtitle {
-    text-align: center;
+#yt-url-label, #yt-dir-label {
     height: 1;
-    margin-bottom: 1;
+    margin-bottom: 0;
+    margin-top: 0;
     color: $fg3;
 }
 
-#yt-url-input {
+#yt-url-input, #yt-dir-input {
     width: 100%;
     background: $bg1;
     border: tall $bg2;
@@ -282,7 +282,7 @@ YoutubeScreen {
     margin-bottom: 1;
 }
 
-#yt-url-input:focus {
+#yt-url-input:focus, #yt-dir-input:focus {
     border: tall $yellow;
 }
 

@@ -113,6 +113,7 @@ def _run_download(
         ytdlp = _find_ytdlp()
         _find_ffmpeg()
 
+        output_dir = os.path.abspath(os.path.expanduser(output_dir))
         os.makedirs(output_dir, exist_ok=True)
 
         _notify(on_progress, 0.0, "Fetching info…", 0, 0)
@@ -121,8 +122,11 @@ def _run_download(
             ytdlp,
             "--newline",
             "--progress",
-            # No --no-playlist: let yt-dlp download whatever the URL points to
-            # (single video URL → 1 track, playlist URL → all tracks)
+            # Download ONLY the best audio stream (much faster than downloading video)
+            "-f", "bestaudio/best",
+            # Use 4 concurrent fragments to speed up download speed
+            "-N", "4",
+            # Extract audio to mp3
             "-x",
             "--audio-format", "mp3",
             "--audio-quality", "0",
