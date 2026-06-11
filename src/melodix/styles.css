@@ -1,44 +1,28 @@
 /* ══════════════════════════════════════════════════════════════════════
-   Liquid Glass Theme  —  btop-inspired translucent layout
+   Gruvbox Dark Hard  —  btop-inspired panel layout
    ══════════════════════════════════════════════════════════════════════ */
 
 /* ── Palette ─────────────────────────────────────────────────────────── */
-$bg:            rgba(15, 17, 26, 0.4);   /* Translucent global overlay */
-$bg_panel:      rgba(24, 28, 41, 0.55);  /* frosted glass panel */
-$bg_focus:      rgba(255, 255, 255, 0.1); /* highlighted row / cursor */
-$bg_hover:      rgba(255, 255, 255, 0.05);
+$bg:     #1d2021;
+$bg0:    #282828;
+$bg1:    #3c3836;
+$bg2:    #504945;
+$bg3:    #665c54;
+$bg4:    #7c6f64;
+$fg:     #ebdbb2;
+$fg1:    #d5c4a1;
+$fg2:    #bdae93;
+$fg3:    #a89984;
+$red:    #fb4934;
+$green:  #b8bb26;
+$yellow: #fabd2f;
+$blue:   #83a598;
+$purple: #d3869b;
+$aqua:   #8ec07c;
+$orange: #fe8019;
+$gray:   #928374;
 
-$glass_border:  rgba(255, 255, 255, 0.12); /* frosted glass edge */
-$glass_focus:   rgba(255, 255, 255, 0.25);
-
-/* Neon accents */
-$neon_cyan:     #00f0ff;
-$neon_pink:     #ff007f;
-$neon_purple:   #a100ff;
-$neon_blue:     #00c6ff;
-$neon_green:    #39ff14;
-
-$fg:            #e2e8f0; /* slate-200 */
-$fg_dim:        #94a3b8; /* slate-400 */
-$fg_muted:      #64748b; /* slate-500 */
-$gray:          #475569; /* slate-600 */
-
-/* Legacy aliases for modal/theme compatibility */
-$bg0:           $bg_panel;
-$bg1:           $bg_hover;
-$bg2:           $glass_border;
-$bg3:           $glass_focus;
-$bg4:           rgba(255, 255, 255, 0.4);
-$fg1:           #cbd5e1;
-$fg2:           $fg_dim;
-$fg3:           $fg_muted;
-$red:           $neon_pink;
-$green:         $neon_green;
-$yellow:        $neon_cyan;
-$blue:          $neon_blue;
-$purple:        $neon_purple;
-$aqua:          $neon_cyan;
-$orange:        $neon_pink;
+$bg_glass: rgba(40, 40, 40, 0.35);
 
 /* ── Root ────────────────────────────────────────────────────────────── */
 Screen {
@@ -53,7 +37,7 @@ Screen {
     background: transparent;
     color: $fg;
     padding: 0 1;
-    border-bottom: solid $glass_border;
+    border-bottom: solid $bg2;
 }
 
 /* ── Main split pane ─────────────────────────────────────────────────── */
@@ -67,19 +51,13 @@ Screen {
 #browser-panel {
     width: 38;
     height: 100%;
-    background: $bg_panel;
-    border: round $glass_border;
-    border-title-color: $fg_dim;
+    background: transparent;
+    border: round $blue;
+    border-title-color: $blue;
     border-title-style: bold;
     border-title-align: left;
     layout: vertical;
     margin: 0 1 0 0;
-}
-
-#browser-panel:focus-within {
-    border: double $neon_cyan;
-    border-title-color: $neon_cyan;
-    border-title-style: bold italic;
 }
 
 #dir-tree {
@@ -87,8 +65,8 @@ Screen {
     background: transparent;
     border: none;
     padding: 0 1;
-    scrollbar-color: $glass_border;
-    scrollbar-color-hover: $glass_focus;
+    scrollbar-color: $bg3;
+    scrollbar-color-hover: $bg4;
 }
 
 #dir-tree:focus {
@@ -98,39 +76,33 @@ Screen {
 
 /* Tree node styling */
 DirectoryTree > .tree--cursor {
-    background: $bg_focus;
-    color: $neon_cyan;
+    background: $bg2;
+    color: $yellow;
     text-style: bold;
 }
 
 DirectoryTree > .tree--highlight {
-    background: $bg_hover;
+    background: $bg1;
 }
 
 DirectoryTree .tree--guides {
-    color: $glass_border;
+    color: $bg3;
 }
 
 DirectoryTree .tree--guides-hover {
-    color: $glass_focus;
+    color: $gray;
 }
 
 /* ── Queue panel ─────────────────────────────────────────────────────── */
 #queue-panel {
     width: 1fr;
     height: 100%;
-    background: $bg_panel;
-    border: round $glass_border;
-    border-title-color: $fg_dim;
+    background: transparent;
+    border: round $yellow;
+    border-title-color: $yellow;
     border-title-style: bold;
     border-title-align: left;
     layout: vertical;
-}
-
-#queue-panel:focus-within {
-    border: double $neon_purple;
-    border-title-color: $neon_purple;
-    border-title-style: bold italic;
 }
 
 #queue-list {
@@ -138,8 +110,8 @@ DirectoryTree .tree--guides-hover {
     background: transparent;
     border: none;
     padding: 0 0;
-    scrollbar-color: $glass_border;
-    scrollbar-color-hover: $glass_focus;
+    scrollbar-color: $bg3;
+    scrollbar-color-hover: $bg4;
 }
 
 #queue-list:focus {
@@ -147,37 +119,31 @@ DirectoryTree .tree--guides-hover {
 }
 
 DataTable > .datatable--cursor {
-    background: $bg_focus;
-    color: $neon_purple;
+    background: $bg2;
+    color: $yellow;
     text-style: bold;
 }
 
 DataTable > .datatable--header {
-    background: rgba(0, 0, 0, 0.25);
-    color: $fg_dim;
+    background: $bg1;
+    color: $gray;
     text-style: bold;
 }
 
 DataTable > .datatable--hover {
-    background: $bg_hover;
+    background: $bg1;
 }
 
 /* ── Bottom player bar ───────────────────────────────────────────────── */
 #bottom-bar {
     height: 11;
-    background: $bg_panel;
-    border: round $glass_border;
-    border-title-color: $fg_dim;
+    background: transparent;
+    border: round $orange;
+    border-title-color: $orange;
     border-title-style: bold;
     border-title-align: left;
     layout: vertical;
     margin-top: 0;
-}
-
-#bottom-bar:focus-within {
-    border: double $neon_pink;
-    border-title-color: $neon_pink;
-    border-title-style: bold italic;
 }
 
 /* Visualizer */
@@ -185,7 +151,7 @@ DataTable > .datatable--hover {
     height: 5;
     width: 100%;
     background: transparent;
-    border-bottom: solid $glass_border;
+    border-bottom: solid $bg2;
 }
 
 /* Transport controls row */
@@ -194,43 +160,43 @@ DataTable > .datatable--hover {
     background: transparent;
     align: left middle;
     padding: 0 1;
-    border-bottom: solid $glass_border;
+    border-bottom: solid $bg2;
 }
 
 .ctrl-btn {
     background: transparent;
     border: none;
-    color: $fg_dim;
+    color: $fg2;
     min-width: 4;
     height: 1;
     padding: 0 1;
 }
 
 .ctrl-btn:hover {
-    color: $neon_cyan;
-    background: $bg_focus;
+    color: $yellow;
+    background: $bg1;
 }
 
 .ctrl-btn.-on {
-    color: $neon_purple;
+    color: $orange;
     text-style: bold;
 }
 
 .ctrl-sep {
-    color: $glass_border;
+    color: $bg3;
     width: 2;
     height: 1;
     content-align: center middle;
 }
 
 .ctrl-label {
-    color: $fg_muted;
+    color: $gray;
     height: 1;
     padding: 0 0;
 }
 
 #volume-display {
-    color: $neon_cyan;
+    color: $aqua;
     text-style: bold;
     width: 5;
 }
@@ -246,12 +212,12 @@ DataTable > .datatable--hover {
     background: transparent;
     align: center middle;
     padding: 0 1;
-    border-bottom: solid $glass_border;
+    border-bottom: solid $bg2;
 }
 
 .time-label {
     width: 7;
-    color: $fg_dim;
+    color: $gray;
     text-align: center;
     height: 1;
 }
@@ -262,20 +228,20 @@ DataTable > .datatable--hover {
 }
 
 #progress-bar > .bar--bar {
-    background: rgba(255, 255, 255, 0.08);
-    color: rgba(255, 255, 255, 0.08);
+    background: $bg2;
+    color: $bg2;
 }
 
 #progress-bar > .bar--complete {
-    background: $neon_cyan;
-    color: $neon_cyan;
+    background: $aqua;
+    color: $aqua;
 }
 
 /* Keys hint row */
 #keys-hint {
     height: 1;
     background: transparent;
-    color: $fg_muted;
+    color: $fg3;
     padding: 0 1;
 }
 
