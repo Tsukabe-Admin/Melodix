@@ -6,10 +6,9 @@ Melodix is a premium, modern, and highly customized Terminal User Interface (TUI
 
 ---
 
-## ✨ Features
+##  Features
 
 - **Terminal Transparency Integration**: Complete `ansi_default` background architecture, allowing your native terminal wallpaper/opacity to shine directly through the panels.
-- **btop Aesthetic**: Dense grid layouts, color-coded sections (Blue for Library, Yellow for Queue, Orange for Controls), and rounded corner styles (`border: round`).
 - **Interactive File Library**: Tree-based navigation starting in `~/Music` by default. Hitting `Enter` on any audio file instantly appends it to the active queue.
 - **Procedural Spectrum Visualizer**:
   - Vertical color gradients matching the btop graph look.
@@ -41,7 +40,7 @@ Melodix is a premium, modern, and highly customized Terminal User Interface (TUI
 
 ---
 
-## 🚀 Installation & Setup
+## Installation & Setup
 
 ### Prerequisites
 
@@ -76,13 +75,4 @@ sudo apt install mpv ffmpeg python3
    melodix
    ```
 
----
-
-## 🛠 Architecture
-
-- **`main.py`**: The entrypoint and Textual App controller. Manages UI mounts, event loops, reactive properties, and links keys to player actions.
-- **`player.py`**: The background controller. Spawns `mpv --idle` and connects via standard UNIX socket IPC. Sends serialized JSON commands and reads messages in an independent background thread.
-- **`visualizer.py`**: Renders the spectrum graph using overlapping mathematical wave expressions scaled in real-time by volume and pause state.
-- **`styles.css`**: Textual CSS styling sheet describing panel layouts, Gruvbox theme tokens, and transparency settings.
-# Melodix
 # Melodix
