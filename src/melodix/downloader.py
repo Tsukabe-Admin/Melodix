@@ -114,9 +114,21 @@ def _run_download(
         _find_ffmpeg()
 
         output_dir = os.path.abspath(os.path.expanduser(output_dir))
+
+        # ── Security: clamp output directory to within the user's home ──────────
+        home_dir = os.path.abspath(os.path.expanduser("~"))
+        if not output_dir.startswith(home_dir + os.sep) and output_dir != home_dir:
+            output_dir = DEFAULT_MUSIC_DIR
+
         os.makedirs(output_dir, exist_ok=True)
 
         _notify(on_progress, 0.0, "Fetching info…", 0, 0)
+
+        # ── Security: only allow http(s) URLs ────────────────────────────────
+        url_lower = url.lower().lstrip()
+        if not (url_lower.startswith("https://") or url_lower.startswith("http://")):
+            _notify(on_error, "Only http:// and https:// URLs are supported.")
+            return
 
         cmd = [
             ytdlp,
@@ -133,6 +145,8 @@ def _run_download(
             "--embed-thumbnail",
             "--add-metadata",
             "--parse-metadata", "%(title)s:%(meta_title)s",
+            # Restrict filenames to ASCII to prevent path traversal via video titles
+            "--restrict-filenames",
             # Simple flat template: ~/Music/Melodix/<Title>.ext
             # For playlists, each track's title is unique so there's no collision.
             "-o", os.path.join(output_dir, "%(title)s.%(ext)s"),

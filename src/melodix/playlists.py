@@ -28,7 +28,7 @@ def get_playlist_path(name: str) -> str:
     return os.path.join(DEFAULT_PLAYLISTS_DIR, f"{safe_name}.json")
 
 def load_playlist(name: str) -> List[Dict[str, Any]]:
-    """Loads tracks from a playlist file."""
+    """Loads tracks from a playlist file, validating each track's fields."""
     path = get_playlist_path(name)
     if not os.path.exists(path):
         return []
@@ -36,9 +36,27 @@ def load_playlist(name: str) -> List[Dict[str, Any]]:
         with open(path, "r", encoding="utf-8") as f:
             data = json.load(f)
             if isinstance(data, dict):
-                return data.get("tracks", [])
+                raw_tracks = data.get("tracks", [])
             elif isinstance(data, list):
-                return data
+                raw_tracks = data
+            else:
+                return []
+
+        validated = []
+        for t in raw_tracks:
+            if not isinstance(t, dict):
+                continue
+            track_path = t.get("path")
+            if not isinstance(track_path, str) or not track_path:
+                continue  # Skip tracks with missing or non-string path
+            validated.append({
+                "path":         track_path,
+                "title":        str(t.get("title") or Path(track_path).stem),
+                "artist":       str(t.get("artist") or ""),
+                "duration":     str(t.get("duration") or "--:--"),
+                "duration_sec": float(t.get("duration_sec") or 0),
+            })
+        return validated
     except Exception:
         pass
     return []
