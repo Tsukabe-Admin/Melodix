@@ -1,4 +1,4 @@
-# 󰓎 Melodix
+# Melodix
 
 Melodix is a premium, modern, and highly customized Terminal User Interface (TUI) music player for Linux, built using Python's modern **Textual** framework and powered by the **mpv** audio engine via IPC sockets. It is designed to match system monitors like `btop` with a rich **Gruvbox dark** theme, rounded panel layouts, transparent background integration, and a custom procedural audio visualizer.
 
@@ -20,7 +20,7 @@ Melodix is a premium, modern, and highly customized Terminal User Interface (TUI
 
 ---
 
-## 🎹 Keyboard Shortcuts
+## Keyboard Shortcuts
 
 | Hotkey | Action |
 | :--- | :--- |
