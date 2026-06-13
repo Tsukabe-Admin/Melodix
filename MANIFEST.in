@@ -1,1 +1,5 @@
-include styles.css
+# Package data is declared in pyproject.toml [tool.setuptools.package-data].
+# This file is kept for sdist completeness.
+include README.md
+include pyproject.toml
+recursive-include src/melodix *.css

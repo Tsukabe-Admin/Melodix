@@ -1,5 +1,0 @@
-downloader
-main
-player
-visualizer
-youtube_screen

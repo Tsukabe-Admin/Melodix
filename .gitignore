@@ -1,20 +1,32 @@
-# Virtual environment
+# ── Virtual environments ────────────────────────────────────────────────────
 .venv/
 venv/
 ENV/
+env/
 
-# Python cache
+# ── Python build artifacts ──────────────────────────────────────────────────
 __pycache__/
 *.py[cod]
 *$py.class
+*.egg-info/
+*.egg
+dist/
+build/
+.eggs/
 
-# Temporary socket files & logs
+# ── Python packaging / tools ────────────────────────────────────────────────
+pip-wheel-metadata/
+.installed.cfg
+MANIFEST
+
+# ── Temporary / runtime files ────────────────────────────────────────────────
 .tmp/
 *.log
 *.sock
 
-# IDE / System
+# ── IDE / OS ─────────────────────────────────────────────────────────────────
 .vscode/
 .idea/
 .DS_Store
 *.swp
+*~
