@@ -620,9 +620,8 @@ class MelodixApp(App):
                     path = str(node.data.path)
                     if node.data.path.is_dir():
                         # Play folder: Clear queue, walk/add all tracks, play first
-                        self._stop_and_reset()
                         self.queue.clear()
-                        self._refresh_queue()
+                        self._stop_and_reset()
 
                         tracks_to_add = []
                         for root, _, files in os.walk(path):
@@ -643,9 +642,8 @@ class MelodixApp(App):
                     else:
                         # Play file: Clear queue, add track, play it
                         if Path(path).suffix.lower() in AUDIO_EXTS:
-                            self._stop_and_reset()
                             self.queue.clear()
-                            self._refresh_queue()
+                            self._stop_and_reset()
                             self.add_to_queue(path)
         except Exception:
             pass

@@ -90,7 +90,7 @@ class AudioVisualizer(Widget):
 
                     # Apply reflection sheen highlight on the bar itself
                     if is_sheen:
-                        style = "bold #ffffff on #504945"
+                        style = "bold #ffffff"
                         ch = "█"
                     elif is_sheen_soft:
                         style = f"bold #ebdbb2"

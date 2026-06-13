@@ -62,12 +62,9 @@ class PlaylistScreen(ModalScreen[dict | None]):
             self._update_preview(playlist_name)
 
     def on_list_view_selected(self, event: ListView.Selected) -> None:
-        # Pressing enter on a playlist loads it (default action)
-        if event.item and event.item.id:
-            playlist_name = event.item.id[4:]
-            tracks = load_playlist(playlist_name)
-            if tracks:
-                self.dismiss({"action": "load", "tracks": tracks})
+        # Enter just confirms the selection/preview — use the Load/Append buttons
+        # to actually act on it. Prevents accidental queue replacement.
+        event.stop()
 
     def _update_preview(self, name: str) -> None:
         self.selected_playlist = name
@@ -151,5 +148,5 @@ class PlaylistScreen(ModalScreen[dict | None]):
         
         # Select the newly saved playlist
         if playlists:
-            lv.index = selected_idx
+            lv.move_cursor(selected_idx)
             self._update_preview(name)
