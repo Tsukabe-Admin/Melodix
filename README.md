@@ -57,7 +57,7 @@ sudo apt install mpv ffmpeg python3
 
 1. Clone this repository:
    ```bash
-   git clone https://github.com/yourusername/melodix.git
+   git clone https://github.com/Tsukabe-Admin/melodix.git
    cd melodix
    ```
 2. Build and install locally:
