@@ -5,13 +5,19 @@ from textual.widgets import Label, Button, Input, ListView, ListItem, DataTable
 from rich.text import Text
 from .playlists import list_playlists, load_playlist, save_playlist, delete_playlist
 
+
 class PlaylistScreen(ModalScreen[dict | None]):
     """Modal screen for managing, loading, appending, and deleting playlists."""
 
     def __init__(self, current_queue: list, **kwargs):
         super().__init__(**kwargs)
-        self.current_queue = current_queue
+        # L4: Copy the list — don't hold an alias to the live queue so that
+        # tracks added by a background download after the modal opens are NOT
+        # silently included in a Save Queue operation.
+        self.current_queue = list(current_queue)
         self.selected_playlist = None
+        # H4: Track the last name the user tried to overwrite for double-press confirm
+        self._overwrite_confirm: str | None = None
 
     def compose(self) -> ComposeResult:
         playlists = list_playlists()
@@ -62,23 +68,25 @@ class PlaylistScreen(ModalScreen[dict | None]):
             self._update_preview(playlist_name)
 
     def on_list_view_selected(self, event: ListView.Selected) -> None:
-        # Enter just confirms the selection/preview — use the Load/Append buttons
-        # to actually act on it. Prevents accidental queue replacement.
+        # H1: Enter on a playlist triggers the Load action — the most natural
+        # terminal UX. Previously we stopped the event (did nothing), which
+        # was a regression from the previous over-aggressive fix.
         event.stop()
+        self._dispatch_action("load")
 
     def _update_preview(self, name: str) -> None:
         self.selected_playlist = name
         tracks = load_playlist(name)
-        
+
         # Update preview label
         self.query_one("#pl-preview-label", Label).update(f"Tracks in '{name}' ({len(tracks)})")
-        
+
         table = self.query_one("#pl-preview-table", DataTable)
         table.clear()
         for idx, t in enumerate(tracks):
-            title = Text(t["title"], style="#ebdbb2")
-            artist = Text(t.get("artist", ""), style="#a89984")
-            dur = Text(t.get("duration", "--:--"), style="#8ec07c")
+            title  = Text(t["title"],              style="#ebdbb2")
+            artist = Text(t.get("artist", ""),     style="#a89984")
+            dur    = Text(t.get("duration", "--:--"), style="#8ec07c")
             table.add_row(title, artist, dur, key=str(idx))
 
     def on_button_pressed(self, event: Button.Pressed) -> None:
@@ -107,14 +115,14 @@ class PlaylistScreen(ModalScreen[dict | None]):
     def _delete_selected(self) -> None:
         if self.selected_playlist:
             delete_playlist(self.selected_playlist)
-            
+
             # Refresh list
             lv = self.query_one("#pl-list", ListView)
             lv.clear()
             playlists = list_playlists()
             for pl in playlists:
                 lv.append(ListItem(Label(f"󰎆  {pl}"), id=f"mgr-{pl}"))
-            
+
             # Clear preview or load next
             if playlists:
                 self._update_preview(playlists[0])
@@ -132,21 +140,34 @@ class PlaylistScreen(ModalScreen[dict | None]):
         if not self.current_queue:
             return  # Nothing to save
 
+        # H4: Overwrite protection — first press warns, second press confirms.
+        if name in list_playlists():
+            if self._overwrite_confirm != name:
+                self._overwrite_confirm = name
+                self.app.notify(
+                    f"'{name}' already exists. Press Save again to overwrite.",
+                    severity="warning",
+                    timeout=4,
+                )
+                return
+        # Either name is new, or user confirmed overwrite with a second press
+        self._overwrite_confirm = None
+
         save_playlist(name, self.current_queue)
         input_w.value = ""
-        
-        # Refresh list
+
+        # Refresh list and select the newly saved playlist
         lv = self.query_one("#pl-list", ListView)
         lv.clear()
         playlists = list_playlists()
-        
+
         selected_idx = 0
         for idx, pl in enumerate(playlists):
             lv.append(ListItem(Label(f"󰎆  {pl}"), id=f"mgr-{pl}"))
             if pl == name:
                 selected_idx = idx
-        
-        # Select the newly saved playlist
+
+        # C2: lv.index is a settable reactive (move_cursor does not exist on ListView)
         if playlists:
-            lv.move_cursor(selected_idx)
+            lv.index = selected_idx
             self._update_preview(name)

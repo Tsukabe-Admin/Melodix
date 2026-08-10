@@ -33,7 +33,15 @@ class MpvPlayer:
         self.on_property_change: Optional[Callable[[str, Any], None]] = None
         self.on_end_file: Optional[Callable[[str], None]] = None
         
-        self.start_mpv()
+        try:
+            self.start_mpv()
+        except Exception:
+            # Clean up tmp_dir so it doesn't accumulate in /tmp on repeated failures
+            try:
+                shutil.rmtree(self.tmp_dir, ignore_errors=True)
+            except Exception:
+                pass
+            raise
 
     def start_mpv(self):
         """Launches the mpv subprocess in idle mode and binds IPC server."""
@@ -64,9 +72,14 @@ class MpvPlayer:
                 "  Debian: sudo apt install mpv"
             )
         
-        # Wait for the Unix socket to be created
+        # Wait for the Unix socket to be created; bail early if mpv crashes
         retries = 20
         while retries > 0 and not os.path.exists(self.socket_path):
+            if self.proc.poll() is not None:
+                raise RuntimeError(
+                    f"mpv exited unexpectedly (code {self.proc.returncode}) "
+                    "before creating the IPC socket."
+                )
             time.sleep(0.1)
             retries -= 1
             

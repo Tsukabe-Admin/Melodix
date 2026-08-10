@@ -24,7 +24,8 @@ $gray:   #928374;
 
 /* ── Root ────────────────────────────────────────────────────────────── */
 Screen {
-    background: ansi_default;
+    background: transparent;
+
     color: $fg;
     layout: vertical;
 }
@@ -636,4 +637,71 @@ PlaylistScreen {
 #pl-btn-close:hover {
     background: $bg4;
 }
+
+
+/* ── ChangeBrowserRootScreen ──────────────────────────────────────────────── */
+
+ChangeBrowserRootScreen {
+    align: center middle;
+}
+
+#chroot-dialog {
+    width: 70;
+    height: auto;
+    background: $bg1;
+    border: tall $orange;
+    padding: 1 2;
+}
+
+#chroot-title {
+    text-style: bold;
+    color: $orange;
+    width: 100%;
+    content-align: center middle;
+    padding-bottom: 1;
+}
+
+#chroot-subtitle {
+    color: $fg3;
+    padding-bottom: 1;
+}
+
+#chroot-input {
+    width: 100%;
+    margin-bottom: 1;
+    border: tall $bg3;
+    background: $bg0;
+    color: $fg;
+}
+
+#chroot-input:focus {
+    border: tall $yellow;
+}
+
+#chroot-buttons {
+    width: 100%;
+    height: auto;
+    align: right middle;
+    padding-top: 1;
+}
+
+#chroot-btn-ok {
+    background: $green;
+    color: $bg0;
+    margin-right: 1;
+}
+
+#chroot-btn-ok:hover {
+    background: #b8bb26cc;
+}
+
+#chroot-btn-cancel {
+    background: $bg3;
+    color: $fg;
+}
+
+#chroot-btn-cancel:hover {
+    background: $bg4;
+}
+
 

@@ -7,7 +7,8 @@ from rich.text import Text
 _LOW  = "#8ec07c"   # aqua   – quiet
 _MID  = "#fabd2f"   # yellow – medium
 _HIGH = "#fb4934"   # red    – loud
-_EMPTY = "#3c3836"  # bg1    – inactive bar cell
+
+_TWO_PI = 2 * math.pi  # C3: modulo constant — wraps cleanly every cycle
 
 
 class AudioVisualizer(Widget):
@@ -26,8 +27,14 @@ class AudioVisualizer(Widget):
         self.set_interval(0.05, self._tick)
 
     def _tick(self) -> None:
+        # I9: Skip heavy computation when stopped and all bars already at zero
+        if not self.is_playing and all(h < 0.001 for h in self.heights):
+            return
+
         if self.is_playing:
-            self.phase = (self.phase + 0.11) % (2 * math.pi * 100)  # prevent float drift
+            # C3: Wrap at 2π (one full cycle) not 2π×100 — prevents visible
+            # stutter every ~5 minutes when the large modulo caused a phase jump.
+            self.phase = (self.phase + 0.11) % _TWO_PI
             for i in range(self.num_bars):
                 w1 = math.sin(self.phase       + i * 0.30)
                 w2 = math.cos(self.phase * 0.5 - i * 0.18)
@@ -93,19 +100,20 @@ class AudioVisualizer(Widget):
                         style = "bold #ffffff"
                         ch = "█"
                     elif is_sheen_soft:
-                        style = f"bold #ebdbb2"
+                        style = "bold #ebdbb2"
                     else:
                         style = f"bold {color}"
 
                     text.append(ch, style=style)
                 else:
-                    # Empty cells / Transparent background representation
+                    # I2: Empty cells — use dim foreground only; no background
+                    # paint needed since the Screen background is transparent.
                     if is_sheen:
-                        text.append("╱", style="bold #504945")
+                        text.append("╱", style="#504945")
                     elif is_sheen_soft:
-                        text.append("·", style="bold #3c3836")
+                        text.append("·", style="#3c3836")
                     else:
-                        text.append(" ", style=_EMPTY)
+                        text.append(" ")  # plain space, zero cost
 
                 text.append(" ")
 

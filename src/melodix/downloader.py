@@ -145,10 +145,11 @@ def _run_download(
             "--embed-thumbnail",
             "--add-metadata",
             "--parse-metadata", "%(title)s:%(meta_title)s",
-            # Restrict filenames to ASCII to prevent path traversal via video titles
-            "--restrict-filenames",
+            # H3: --windows-filenames strips truly dangerous chars (/ \ : * ? " < > |)
+            # without converting spaces to underscores like --restrict-filenames did.
+            # This keeps "My Favourite Song.mp3" readable while preventing path traversal.
+            "--windows-filenames",
             # Simple flat template: ~/Music/Melodix/<Title>.ext
-            # For playlists, each track's title is unique so there's no collision.
             "-o", os.path.join(output_dir, "%(title)s.%(ext)s"),
             url,
         ]
@@ -199,13 +200,17 @@ def _run_download(
                 continue
 
             # ── Destination detection ──────────────────────────────────────────
-            # "[ExtractAudio] Destination: /path/to/file.mp3"
+            # M2: Match ANY Destination line (not just .mp3) so we can track the
+            # intermediate file path too. Only accept it as current_path once we
+            # confirm it ends with .mp3 (the final output after audio extraction).
             dest_match = re.search(
-                r"\[(?:ExtractAudio|ffmpeg|Merger)\] Destination: (.+\.mp3)",
+                r"\[(?:ExtractAudio|ffmpeg|Merger|MoveFiles)\] Destination: (.+)",
                 line,
             )
             if dest_match:
-                current_path = dest_match.group(1).strip()
+                dest_path = dest_match.group(1).strip()
+                if dest_path.lower().endswith(".mp3"):
+                    current_path = dest_path
 
             # "[download] /path/file.mp3 has already been downloaded"
             already_match = re.search(
