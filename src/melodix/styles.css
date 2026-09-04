@@ -23,9 +23,12 @@ $orange: #fe8019;
 $gray:   #928374;
 
 /* ── Root ────────────────────────────────────────────────────────────── */
-Screen {
-    background: transparent;
+App {
+    background: ansi_default;
+}
 
+Screen {
+    background: ansi_default;
     color: $fg;
     layout: vertical;
 }
@@ -644,6 +647,7 @@ PlaylistScreen {
 
 ChangeBrowserRootScreen {
     align: center middle;
+    background: rgba(0,0,0,0.6);
 }
 
 #chroot-dialog {
