@@ -72,23 +72,33 @@ class MpvPlayer:
                 "  Debian: sudo apt install mpv"
             )
         
-        # Wait for the Unix socket to be created; bail early if mpv crashes
-        retries = 20
-        while retries > 0 and not os.path.exists(self.socket_path):
+        # Wait for the Unix socket to be created and accept connections
+        retries = 30
+        connected = False
+        while retries > 0:
             if self.proc.poll() is not None:
                 raise RuntimeError(
                     f"mpv exited unexpectedly (code {self.proc.returncode}) "
                     "before creating the IPC socket."
                 )
+            if os.path.exists(self.socket_path):
+                try:
+                    self.client = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
+                    self.client.connect(self.socket_path)
+                    connected = True
+                    break
+                except (ConnectionRefusedError, FileNotFoundError, OSError):
+                    if self.client:
+                        try:
+                            self.client.close()
+                        except Exception:
+                            pass
+                        self.client = None
             time.sleep(0.1)
             retries -= 1
             
-        if not os.path.exists(self.socket_path):
-            raise RuntimeError("Failed to start mpv: IPC socket not created.")
-            
-        # Connect to the socket
-        self.client = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
-        self.client.connect(self.socket_path)
+        if not connected or not self.client:
+            raise RuntimeError("Failed to start mpv: IPC socket connection failed.")
         
         self.running = True
         self.reader_thread = threading.Thread(target=self._read_loop, daemon=True)
@@ -179,13 +189,9 @@ class MpvPlayer:
         self.metadata = {}
         self.paused = False  # Optimistically mark as playing
         self._send_command("loadfile", path, "replace")
-        # Explicitly unpause — guards against MPV starting in paused state
-        # from a previous interaction. Small delay lets the load command
-        # register before the unpause is sent.
-        def _unpause():
-            time.sleep(0.15)
-            self._send_command("set_property", "pause", False)
-        threading.Thread(target=_unpause, daemon=True).start()
+        # Unpause immediately in sequential FIFO order; avoid race conditions
+        # and thread leaks caused by sleeping in detached background threads.
+        self._send_command("set_property", "pause", False)
 
     def play(self):
         """Resumes playback."""
@@ -211,6 +217,7 @@ class MpvPlayer:
     def set_volume(self, level: float):
         """Sets playback volume (0 to 100)."""
         level = max(0.0, min(100.0, level))
+        self.volume = level  # Update cached volume immediately for responsive rapid keypresses
         self._send_command("set_property", "volume", level)
 
     def toggle_mute(self):
@@ -226,26 +233,33 @@ class MpvPlayer:
         self._send_command("stop")
 
     def close(self):
-        """Terminates connection and kills the mpv subprocess."""
+        """Terminates connection and kills the mpv subprocess (strictly idempotent)."""
         self.running = False
-        if self.client:
+        client = self.client
+        self.client = None
+        if client:
             try:
                 # Shutdown unblocks the reader thread which is blocked on recv()
-                self.client.shutdown(socket.SHUT_RDWR)
-                self.client.close()
+                client.shutdown(socket.SHUT_RDWR)
+                client.close()
             except Exception:
                 pass
-        if self.proc:
+
+        proc = self.proc
+        self.proc = None
+        if proc:
             try:
-                self.proc.terminate()
-                self.proc.wait(timeout=2)
+                proc.terminate()
+                proc.wait(timeout=2)
             except Exception:
                 try:
-                    self.proc.kill()
+                    proc.kill()
                 except Exception:
                     pass
+
         # Clean up the temporary directory (socket file + dir)
-        try:
-            shutil.rmtree(self.tmp_dir, ignore_errors=True)
-        except Exception:
-            pass
+        if self.tmp_dir and os.path.exists(self.tmp_dir):
+            try:
+                shutil.rmtree(self.tmp_dir, ignore_errors=True)
+            except Exception:
+                pass

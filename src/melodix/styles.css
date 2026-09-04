@@ -135,7 +135,7 @@ DataTable > .datatable--hover {
 
 /* ── Bottom player bar ───────────────────────────────────────────────── */
 #bottom-bar {
-    height: 11;
+    height: 10;
     background: transparent;
     border: round $orange;
     border-title-color: $orange;
@@ -159,7 +159,7 @@ DataTable > .datatable--hover {
     background: transparent;
     align: left middle;
     padding: 0 1;
-    border-bottom: solid $bg2;
+    border: none;
 }
 
 .ctrl-btn {
@@ -198,6 +198,7 @@ DataTable > .datatable--hover {
     color: $aqua;
     text-style: bold;
     width: 5;
+    margin-left: 1;
 }
 
 #vol-bar {
@@ -211,11 +212,11 @@ DataTable > .datatable--hover {
     background: transparent;
     align: center middle;
     padding: 0 1;
-    border-bottom: solid $bg2;
+    border: none;
 }
 
 .time-label {
-    width: 7;
+    width: 8;
     color: $gray;
     text-align: center;
     height: 1;

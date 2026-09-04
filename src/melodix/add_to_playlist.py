@@ -4,6 +4,15 @@ from textual.containers import Vertical, Horizontal
 from textual.widgets import Label, Button, Input, ListView, ListItem
 from .playlists import list_playlists, add_track_to_playlist
 
+
+class PlaylistItem(ListItem):
+    """Custom ListItem storing playlist_name directly, avoiding invalid DOM IDs."""
+
+    def __init__(self, playlist_name: str, **kwargs):
+        super().__init__(Label(f"󰎆  {playlist_name}"), **kwargs)
+        self.playlist_name = playlist_name
+
+
 class AddToPlaylistScreen(ModalScreen[str | None]):
     """Modal dialog to select a playlist to add a track to, or create a new one."""
 
@@ -21,7 +30,7 @@ class AddToPlaylistScreen(ModalScreen[str | None]):
             yield Label("Choose Playlist:", classes="add-pl-label")
             with ListView(id="add-pl-list"):
                 for pl in playlists:
-                    yield ListItem(Label(f"󰎆  {pl}"), id=f"pl-{pl}")
+                    yield PlaylistItem(pl)
             
             yield Label("Or Create New Playlist:", classes="add-pl-label")
             with Horizontal(id="add-pl-new-row"):
@@ -35,8 +44,8 @@ class AddToPlaylistScreen(ModalScreen[str | None]):
         self.query_one("#add-pl-list").focus()
 
     def on_list_view_selected(self, event: ListView.Selected) -> None:
-        if event.item and event.item.id:
-            playlist_name = event.item.id[3:]  # Strip 'pl-' prefix
+        if isinstance(event.item, PlaylistItem):
+            playlist_name = event.item.playlist_name
             add_track_to_playlist(playlist_name, self.track)
             self.dismiss(playlist_name)
 

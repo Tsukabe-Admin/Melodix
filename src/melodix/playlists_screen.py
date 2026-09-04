@@ -6,6 +6,14 @@ from rich.text import Text
 from .playlists import list_playlists, load_playlist, save_playlist, delete_playlist
 
 
+class PlaylistItem(ListItem):
+    """Custom ListItem that stores the playlist name directly, avoiding invalid DOM IDs."""
+
+    def __init__(self, playlist_name: str, **kwargs):
+        super().__init__(Label(f"󰎆  {playlist_name}"), **kwargs)
+        self.playlist_name = playlist_name
+
+
 class PlaylistScreen(ModalScreen[dict | None]):
     """Modal screen for managing, loading, appending, and deleting playlists."""
 
@@ -31,7 +39,7 @@ class PlaylistScreen(ModalScreen[dict | None]):
                     yield Label("Saved Playlists", id="pl-list-label")
                     with ListView(id="pl-list"):
                         for pl in playlists:
-                            yield ListItem(Label(f"󰎆  {pl}"), id=f"mgr-{pl}")
+                            yield PlaylistItem(pl)
 
                 with Vertical(id="pl-right-panel"):
                     yield Label("Tracks Preview", id="pl-preview-label")
@@ -63,14 +71,12 @@ class PlaylistScreen(ModalScreen[dict | None]):
             self._update_preview(playlists[0])
 
     def on_list_view_highlighted(self, event: ListView.Highlighted) -> None:
-        if event.item and event.item.id:
-            playlist_name = event.item.id[4:]  # Strip 'mgr-'
-            self._update_preview(playlist_name)
+        if isinstance(event.item, PlaylistItem):
+            self._update_preview(event.item.playlist_name)
 
     def on_list_view_selected(self, event: ListView.Selected) -> None:
         # H1: Enter on a playlist triggers the Load action — the most natural
-        # terminal UX. Previously we stopped the event (did nothing), which
-        # was a regression from the previous over-aggressive fix.
+        # terminal UX. Previously we stopped the event (did nothing).
         event.stop()
         self._dispatch_action("load")
 
@@ -111,6 +117,8 @@ class PlaylistScreen(ModalScreen[dict | None]):
             tracks = load_playlist(self.selected_playlist)
             if tracks:
                 self.dismiss({"action": action, "tracks": tracks})
+            else:
+                self.app.notify(f"Playlist '{self.selected_playlist}' has no tracks.", severity="warning", timeout=3)
 
     def _delete_selected(self) -> None:
         if self.selected_playlist:
@@ -121,11 +129,12 @@ class PlaylistScreen(ModalScreen[dict | None]):
             lv.clear()
             playlists = list_playlists()
             for pl in playlists:
-                lv.append(ListItem(Label(f"󰎆  {pl}"), id=f"mgr-{pl}"))
+                lv.append(PlaylistItem(pl))
 
             # Clear preview or load next
             if playlists:
                 self._update_preview(playlists[0])
+                lv.index = 0
             else:
                 self.selected_playlist = None
                 self.query_one("#pl-preview-label", Label).update("Tracks Preview")
@@ -138,7 +147,8 @@ class PlaylistScreen(ModalScreen[dict | None]):
             input_w.focus()
             return
         if not self.current_queue:
-            return  # Nothing to save
+            self.app.notify("Queue is empty — nothing to save.", severity="warning", timeout=3)
+            return
 
         # H4: Overwrite protection — first press warns, second press confirms.
         if name in list_playlists():
@@ -163,11 +173,11 @@ class PlaylistScreen(ModalScreen[dict | None]):
 
         selected_idx = 0
         for idx, pl in enumerate(playlists):
-            lv.append(ListItem(Label(f"󰎆  {pl}"), id=f"mgr-{pl}"))
+            lv.append(PlaylistItem(pl))
             if pl == name:
                 selected_idx = idx
 
-        # C2: lv.index is a settable reactive (move_cursor does not exist on ListView)
+        # C2: lv.index is a settable reactive
         if playlists:
             lv.index = selected_idx
             self._update_preview(name)

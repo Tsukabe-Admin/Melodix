@@ -39,7 +39,9 @@ def save(cfg: Dict[str, Any]) -> None:
     """Persist the given settings dict to disk (best-effort, never raises)."""
     try:
         os.makedirs(_CONFIG_DIR, exist_ok=True)
-        with open(_CONFIG_FILE, "w", encoding="utf-8") as f:
+        tmp_file = f"{_CONFIG_FILE}.tmp"
+        with open(tmp_file, "w", encoding="utf-8") as f:
             json.dump(cfg, f, indent=2)
+        os.replace(tmp_file, _CONFIG_FILE)
     except Exception:
         pass

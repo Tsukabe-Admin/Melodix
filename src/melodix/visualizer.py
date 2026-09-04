@@ -8,7 +8,7 @@ _LOW  = "#8ec07c"   # aqua   – quiet
 _MID  = "#fabd2f"   # yellow – medium
 _HIGH = "#fb4934"   # red    – loud
 
-_TWO_PI = 2 * math.pi  # C3: modulo constant — wraps cleanly every cycle
+_WRAP_PERIOD = 260 * math.pi  # Exact least common multiple of all harmonic periods (1.0, 0.5, 1.3, 0.2)
 
 
 class AudioVisualizer(Widget):
@@ -32,9 +32,9 @@ class AudioVisualizer(Widget):
             return
 
         if self.is_playing:
-            # C3: Wrap at 2π (one full cycle) not 2π×100 — prevents visible
-            # stutter every ~5 minutes when the large modulo caused a phase jump.
-            self.phase = (self.phase + 0.11) % _TWO_PI
+            # Wrap at exact common harmonic period (260π) to guarantee mathematically
+            # continuous wave motion with zero vertical height jumps across all bars.
+            self.phase = (self.phase + 0.11) % _WRAP_PERIOD
             for i in range(self.num_bars):
                 w1 = math.sin(self.phase       + i * 0.30)
                 w2 = math.cos(self.phase * 0.5 - i * 0.18)

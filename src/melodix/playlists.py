@@ -77,11 +77,17 @@ def save_playlist(name: str, tracks: List[Dict[str, Any]]) -> None:
             for t in tracks
         ]
     }
+    tmp_path = f"{path}.tmp"
     try:
-        with open(path, "w", encoding="utf-8") as f:
+        with open(tmp_path, "w", encoding="utf-8") as f:
             json.dump(data, f, indent=2, ensure_ascii=False)
+        os.replace(tmp_path, path)
     except Exception:
-        pass
+        if os.path.exists(tmp_path):
+            try:
+                os.remove(tmp_path)
+            except Exception:
+                pass
 
 def delete_playlist(name: str) -> None:
     """Deletes a playlist file."""

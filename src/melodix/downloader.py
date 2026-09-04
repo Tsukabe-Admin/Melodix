@@ -124,8 +124,9 @@ def _run_download(
 
         _notify(on_progress, 0.0, "Fetching info…", 0, 0)
 
-        # ── Security: only allow http(s) URLs ────────────────────────────────
-        url_lower = url.lower().lstrip()
+        # ── Security & Sanitization: strip whitespace and validate scheme ─────
+        url = url.strip()
+        url_lower = url.lower()
         if not (url_lower.startswith("https://") or url_lower.startswith("http://")):
             _notify(on_error, "Only http:// and https:// URLs are supported.")
             return
@@ -272,7 +273,7 @@ def _run_download(
         elif not current_path:
             # Fallback: pick the most recently modified MP3 not already completed
             mp3s = sorted(
-                Path(output_dir).rglob("*.mp3"),
+                Path(output_dir).glob("*.mp3"),
                 key=lambda p: p.stat().st_mtime,
                 reverse=True,
             )
