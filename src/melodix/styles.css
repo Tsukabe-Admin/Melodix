@@ -33,6 +33,13 @@ Screen {
     layout: vertical;
 }
 
+* {
+    scrollbar-background: ansi_default;
+    scrollbar-background-hover: ansi_default;
+    scrollbar-background-active: ansi_default;
+    scrollbar-corner-color: ansi_default;
+}
+
 /* ── Header status bar ───────────────────────────────────────────────── */
 #header-bar {
     height: 1;
@@ -67,6 +74,7 @@ Screen {
     background: transparent;
     border: none;
     padding: 0 1;
+    overflow-x: hidden;
     scrollbar-color: $bg3;
     scrollbar-color-hover: $bg4;
 }

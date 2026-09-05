@@ -165,6 +165,8 @@ class MelodixApp(App):
     repeat_mode        = reactive("none")  # none | track | all
 
     def __init__(self, **kwargs):
+        if "ansi_color" not in kwargs:
+            kwargs["ansi_color"] = True
         super().__init__(**kwargs)
         self.player = MpvPlayer(os.path.abspath(os.path.dirname(__file__)))
         self.player.on_property_change = self._mpv_prop_cb
