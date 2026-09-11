@@ -1,4 +1,14 @@
+"""player.py — mpv backend driven over its JSON IPC socket.
+
+mpv runs as a child process in idle mode. Commands are written to a Unix
+socket and events are read from it on a dedicated daemon thread, which keeps
+a local cache of the properties the UI cares about.
+"""
+from __future__ import annotations
+
+import contextlib
 import json
+import logging
 import os
 import shutil
 import socket
@@ -6,52 +16,86 @@ import subprocess
 import tempfile
 import threading
 import time
-from typing import Callable, Optional, Dict, Any
+from collections.abc import Callable
+from typing import Any
+
+log = logging.getLogger(__name__)
+
+# Properties the UI subscribes to, in observation order.
+_OBSERVED_PROPERTIES = (
+    "time-pos",
+    "duration",
+    "metadata",
+    "pause",
+    "volume",
+    "mute",
+)
+
 
 class MpvPlayer:
-    def __init__(self, workspace_path: str):
-        # Use a proper system temp dir so the socket works from any CWD
-        # (important when running as an installed package via `melodix`)
+    """Owns the mpv subprocess and exposes a small playback API."""
+
+    def __init__(self) -> None:
+        # A system temp dir keeps the socket path short and independent of CWD,
+        # which matters when running as an installed package.
         self.tmp_dir = tempfile.mkdtemp(prefix="melodix-")
         self.socket_path = os.path.join(self.tmp_dir, f"mpv_{os.getpid()}.sock")
-        self.proc: Optional[subprocess.Popen] = None
-        self.client: Optional[socket.socket] = None
+        self.proc: subprocess.Popen | None = None
+        self.client: socket.socket | None = None
         self.running = False
-        self.reader_thread: Optional[threading.Thread] = None
+        self.reader_thread: threading.Thread | None = None
         self._send_lock = threading.Lock()  # Serialize socket writes
-        
+        self._closing = False
+        self._observe_id = 0
+        self._observed: dict[str, int] = {}
+
         # Player state cache
         self.time_pos: float = 0.0
         self.duration: float = 0.0
-        self.metadata: Dict[str, Any] = {}
+        self.metadata: dict[str, Any] = {}
         self.paused: bool = True
         self.volume: float = 100.0
         self.mute: bool = False
-        self.playing_path: Optional[str] = None
-        
-        # Event callbacks
-        self.on_property_change: Optional[Callable[[str, Any], None]] = None
-        self.on_end_file: Optional[Callable[[str], None]] = None
-        
+        self.playing_path: str | None = None
+
+        # Event callbacks. on_player_died fires if the mpv process/socket goes
+        # away while it was not deliberately shut down.
+        self.on_property_change: Callable[[str, Any], None] | None = None
+        self.on_end_file: Callable[[str], None] | None = None
+        self.on_player_died: Callable[[], None] | None = None
+
         try:
             self.start_mpv()
         except Exception:
-            # Clean up tmp_dir so it doesn't accumulate in /tmp on repeated failures
-            try:
-                shutil.rmtree(self.tmp_dir, ignore_errors=True)
-            except Exception:
-                pass
+            # Don't leave an orphaned mpv process or temp dir behind when mpv
+            # is missing or fails to come up.
+            self._kill_process()
+            shutil.rmtree(self.tmp_dir, ignore_errors=True)
             raise
 
-    def start_mpv(self):
-        """Launches the mpv subprocess in idle mode and binds IPC server."""
+    def _kill_process(self) -> None:
+        """Terminate the mpv child process, if any (best effort)."""
+        proc = self.proc
+        self.proc = None
+        if proc is None:
+            return
+        try:
+            proc.terminate()
+            proc.wait(timeout=2)
+        except subprocess.TimeoutExpired:
+            with contextlib.suppress(OSError):
+                proc.kill()
+        except OSError:
+            pass
+
+    # ── Startup ────────────────────────────────────────────────────────────────
+
+    def start_mpv(self) -> None:
+        """Launch the mpv subprocess in idle mode and connect to its IPC socket."""
         if os.path.exists(self.socket_path):
-            try:
+            with contextlib.suppress(OSError):
                 os.unlink(self.socket_path)
-            except OSError:
-                pass
-                
-        # Launch mpv with remote IPC enabled, disabling video window and terminal output
+
         try:
             self.proc = subprocess.Popen(
                 [
@@ -70,9 +114,9 @@ class MpvPlayer:
                 "mpv not found. Please install it first:\n"
                 "  Arch:   sudo pacman -S mpv\n"
                 "  Debian: sudo apt install mpv"
-            )
-        
-        # Wait for the Unix socket to be created and accept connections
+            ) from None
+
+        # Wait for the Unix socket to be created and accept connections.
         retries = 30
         connected = False
         while retries > 0:
@@ -87,33 +131,30 @@ class MpvPlayer:
                     self.client.connect(self.socket_path)
                     connected = True
                     break
-                except (ConnectionRefusedError, FileNotFoundError, OSError):
+                except OSError:
                     if self.client:
-                        try:
+                        with contextlib.suppress(OSError):
                             self.client.close()
-                        except Exception:
-                            pass
                         self.client = None
             time.sleep(0.1)
             retries -= 1
-            
+
         if not connected or not self.client:
             raise RuntimeError("Failed to start mpv: IPC socket connection failed.")
-        
-        self.running = True
-        self.reader_thread = threading.Thread(target=self._read_loop, daemon=True)
-        self.reader_thread.start()
-        
-        # Observe properties for real-time tracking
-        self.observe_property("time-pos")
-        self.observe_property("duration")
-        self.observe_property("metadata")
-        self.observe_property("pause")
-        self.observe_property("volume")
-        self.observe_property("mute")
 
-    def _send_command(self, *args) -> bool:
-        """Helper to send a command to the mpv IPC socket."""
+        self.running = True
+        self.reader_thread = threading.Thread(
+            target=self._read_loop, name="mpv-ipc-reader", daemon=True
+        )
+        self.reader_thread.start()
+
+        for prop in _OBSERVED_PROPERTIES:
+            self.observe_property(prop)
+
+    # ── IPC plumbing ───────────────────────────────────────────────────────────
+
+    def _send_command(self, *args: Any) -> bool:
+        """Send a command to mpv. Returns ``False`` if it could not be delivered."""
         if not self.client or not self.running:
             return False
         payload = {"command": list(args)}
@@ -121,19 +162,30 @@ class MpvPlayer:
             with self._send_lock:
                 self.client.sendall((json.dumps(payload) + "\n").encode("utf-8"))
             return True
-        except Exception:
+        except OSError:
+            log.debug("failed to send mpv command %r", args, exc_info=True)
             return False
 
-    def observe_property(self, prop_name: str):
-        """Sends command to observe a property's changes."""
-        # Using the property name as the ID for simpler routing
-        self._send_command("observe_property", hash(prop_name) & 0xffffff, prop_name)
+    def observe_property(self, prop_name: str) -> None:
+        """Ask mpv to push updates for ``prop_name``.
 
-    def _read_loop(self):
-        """Reads lines of JSON events from the mpv socket."""
+        mpv requires each observer to have a unique numeric id; a monotonic
+        counter is used rather than ``hash()`` (which is randomised per process
+        and can collide).
+        """
+        if prop_name in self._observed:
+            return
+        self._observe_id += 1
+        self._observed[prop_name] = self._observe_id
+        self._send_command("observe_property", self._observe_id, prop_name)
+
+    def _read_loop(self) -> None:
+        """Read newline-delimited JSON events from the mpv socket."""
         buffer = b""
         while self.running:
             try:
+                if not self.client:
+                    break
                 data = self.client.recv(4096)
                 if not data:
                     break
@@ -144,122 +196,130 @@ class MpvPlayer:
                         continue
                     try:
                         message = json.loads(line.decode("utf-8", errors="ignore"))
-                        self._handle_ipc_message(message)
                     except json.JSONDecodeError:
-                        pass
-            except Exception:
+                        log.debug("ignoring malformed mpv message: %r", line)
+                        continue
+                    self._handle_ipc_message(message)
+            except OSError:
                 break
-        self.running = False
+            except Exception:  # pragma: no cover - defensive
+                log.exception("unexpected error in mpv reader thread")
+                break
 
-    def _handle_ipc_message(self, msg: Dict[str, Any]):
-        """Parses the JSON message from mpv and updates cache."""
+        self.running = False
+        if not self._closing:
+            log.warning("mpv connection ended unexpectedly")
+            self._safe_callback(self.on_player_died)
+
+    @staticmethod
+    def _safe_callback(callback: Callable[..., None] | None, *args: Any) -> None:
+        """Invoke a user callback without letting it kill the reader thread."""
+        if callback is None:
+            return
+        try:
+            callback(*args)
+        except Exception:  # noqa: BLE001 - callbacks are user/UI code
+            log.exception("error in mpv callback %r", callback)
+
+    @staticmethod
+    def _as_float(value: Any, default: float = 0.0) -> float:
+        """Best-effort numeric coercion; mpv occasionally sends null/strings."""
+        try:
+            return float(value)
+        except (TypeError, ValueError):
+            return default
+
+    def _handle_ipc_message(self, msg: dict[str, Any]) -> None:
+        """Update the property cache and fan out to the registered callbacks."""
         event = msg.get("event")
         if event == "property-change":
             name = msg.get("name")
             data = msg.get("data")
-            
-            # Update cache based on property
+
             if name == "time-pos":
-                self.time_pos = float(data) if data is not None else 0.0
+                self.time_pos = self._as_float(data)
             elif name == "duration":
-                self.duration = float(data) if data is not None else 0.0
+                self.duration = self._as_float(data)
             elif name == "metadata":
                 self.metadata = data if isinstance(data, dict) else {}
             elif name == "pause":
                 self.paused = bool(data)
             elif name == "volume":
-                self.volume = float(data) if data is not None else 100.0
+                self.volume = self._as_float(data, 100.0)
             elif name == "mute":
                 self.mute = bool(data)
-                
-            if self.on_property_change:
-                self.on_property_change(name, data)
-                
-        elif event == "end-file":
-            reason = msg.get("reason", "")
-            if self.on_end_file:
-                self.on_end_file(reason)
 
-    # Public API for Playback Control
-    def load_file(self, path: str):
-        """Loads and starts playing an audio file immediately."""
+            self._safe_callback(self.on_property_change, name, data)
+
+        elif event == "end-file":
+            self._safe_callback(self.on_end_file, msg.get("reason", ""))
+
+    # ── Public playback API ────────────────────────────────────────────────────
+
+    def load_file(self, path: str) -> None:
+        """Load and start playing an audio file immediately."""
         self.playing_path = path
         self.time_pos = 0.0
         self.duration = 0.0
         self.metadata = {}
-        self.paused = False  # Optimistically mark as playing
+        self.paused = False  # optimistic; corrected by the next mpv event
         self._send_command("loadfile", path, "replace")
-        # Unpause immediately in sequential FIFO order; avoid race conditions
-        # and thread leaks caused by sleeping in detached background threads.
         self._send_command("set_property", "pause", False)
 
-    def play(self):
-        """Resumes playback."""
+    def play(self) -> None:
+        """Resume playback."""
         self._send_command("set_property", "pause", False)
 
-    def pause(self):
-        """Pauses playback."""
+    def pause(self) -> None:
+        """Pause playback."""
         self._send_command("set_property", "pause", True)
 
-    def toggle_pause(self):
-        """Toggles between play and pause using mpv's native cycle command.
-        
-        Using 'cycle pause' avoids the race condition where self.paused hasn't
-        been updated yet from the IPC event stream.
-        """
+    def toggle_pause(self) -> None:
+        """Toggle play/pause via mpv's own state (avoids a stale-cache race)."""
         self._send_command("cycle", "pause")
 
-    def seek(self, seconds: float, relative: bool = True):
-        """Seeks within the track."""
+    def seek(self, seconds: float, relative: bool = True) -> None:
+        """Seek within the current track."""
         mode = "relative" if relative else "absolute"
         self._send_command("seek", seconds, mode)
 
-    def set_volume(self, level: float):
-        """Sets playback volume (0 to 100)."""
+    def set_volume(self, level: float) -> None:
+        """Set playback volume, clamped to 0–100."""
         level = max(0.0, min(100.0, level))
-        self.volume = level  # Update cached volume immediately for responsive rapid keypresses
+        self.volume = level  # update cache immediately for responsive keypresses
         self._send_command("set_property", "volume", level)
 
-    def toggle_mute(self):
-        """Toggles mute state using mpv's native cycle to avoid race conditions."""
+    def toggle_mute(self) -> None:
+        """Toggle mute via mpv's own state."""
         self._send_command("cycle", "mute")
 
-    def stop(self):
-        """Stops playback."""
+    def stop(self) -> None:
+        """Stop playback and clear the cached track state."""
         self.playing_path = None
         self.time_pos = 0.0
         self.duration = 0.0
         self.metadata = {}
         self._send_command("stop")
 
-    def close(self):
-        """Terminates connection and kills the mpv subprocess (strictly idempotent)."""
+    def close(self) -> None:
+        """Terminate the connection and the mpv subprocess (idempotent)."""
+        self._closing = True
         self.running = False
+
         client = self.client
         self.client = None
         if client:
             try:
-                # Shutdown unblocks the reader thread which is blocked on recv()
+                # shutdown() unblocks the reader thread's recv().
                 client.shutdown(socket.SHUT_RDWR)
                 client.close()
-            except Exception:
+            except OSError:
                 pass
 
-        proc = self.proc
-        self.proc = None
-        if proc:
-            try:
-                proc.terminate()
-                proc.wait(timeout=2)
-            except Exception:
-                try:
-                    proc.kill()
-                except Exception:
-                    pass
+        thread = self.reader_thread
+        self.reader_thread = None
+        self._kill_process()
+        if thread and thread.is_alive():
+            thread.join(timeout=1)
 
-        # Clean up the temporary directory (socket file + dir)
-        if self.tmp_dir and os.path.exists(self.tmp_dir):
-            try:
-                shutil.rmtree(self.tmp_dir, ignore_errors=True)
-            except Exception:
-                pass
+        shutil.rmtree(self.tmp_dir, ignore_errors=True)

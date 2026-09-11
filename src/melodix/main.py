@@ -1,130 +1,67 @@
-import math
+"""main.py — Melodix application entry point.
+
+Wires the mpv backend, the queue state machine and the Textual screens
+together. Business logic that is not UI-specific lives in sibling modules.
+"""
+from __future__ import annotations
+
+import logging
 import os
 import random
 import sys
 from pathlib import Path
-from typing import Iterable, List, Dict, Any
 
-# Absolute path so the CSS loads correctly from any working directory
-_APP_DIR = Path(__file__).parent
-
+from rich.text import Text
 from textual.app import App, ComposeResult
 from textual.containers import Horizontal, Vertical
 from textual.coordinate import Coordinate
-from textual.widgets import Button, Label, DirectoryTree, DataTable, ProgressBar, Input
 from textual.reactive import reactive
-from textual.screen import ModalScreen
-from rich.text import Text
+from textual.widgets import Button, DataTable, DirectoryTree, Label, ProgressBar
 
+from . import __version__
 from . import config as _cfg
-from .__init__ import __version__
+from .add_to_playlist import AddToPlaylistScreen
+from .browser import AudioDirectoryTree
+from .change_root_screen import ChangeBrowserRootScreen
+from .models import format_time, is_audio_file, make_track
 from .player import MpvPlayer
+from .playlists_screen import PlaylistScreen
+from .theme import (
+    AQUA,
+    BG2,
+    BG3,
+    BLUE,
+    FG,
+    FG1,
+    FG3,
+    GRAY,
+    GREEN,
+    ORANGE,
+    RED,
+    YELLOW,
+)
 from .visualizer import AudioVisualizer
 from .youtube_screen import YoutubeScreen
-from .add_to_playlist import AddToPlaylistScreen
-from .playlists_screen import PlaylistScreen
 
-# ── Gruvbox palette constants (for Rich markup) ────────────────────────────────
-_YEL  = "#fabd2f"   # yellow  – primary accent / active
-_BLU  = "#83a598"   # blue    – info / secondary
-_GRN  = "#b8bb26"   # green   – playing / positive
-_RED  = "#fb4934"   # red     – alert / peak
-_ORG  = "#fe8019"   # orange  – toggles / warnings
-_AQU  = "#8ec07c"   # aqua    – volume / progress
-_FG   = "#ebdbb2"   # fg      – primary text
-_FG1  = "#d5c4a1"   # fg1     – secondary text
-_FG3  = "#a89984"   # fg3     – dimmed / labels
-_BG2  = "#504945"   # bg2     – separators
-_BG3  = "#665c54"   # bg3     – inactive borders
-_PUR  = "#d3869b"   # purple  – metadata accent
-_GRY  = "#928374"   # gray    – muted
+log = logging.getLogger(__name__)
 
-AUDIO_EXTS = {".mp3", ".m4a", ".ogg", ".flac", ".wav", ".mp4",
-              ".aac", ".webm", ".opus", ".wma"}
+# Absolute path so the CSS loads correctly from any working directory.
+_APP_DIR = Path(__file__).parent
 
 
-def format_time(seconds: float) -> str:
-    # Handle None, NaN, and infinite duration (e.g. live streams)
-    if seconds is None or math.isnan(seconds):
-        return "00:00"
-    if math.isinf(seconds):
-        return "∞"
-    s = int(max(0, seconds))
-    m = s // 60
-    sec = s % 60
-    if m >= 60:
-        return f"{m // 60}:{m % 60:02d}:{sec:02d}"
-    return f"{m:02d}:{sec:02d}"
-
-
-def _ascii_bar(value: int, total: int = 100, width: int = 10,
-               fill: str = "█", empty: str = "░") -> str:
+def ascii_bar(value: int, total: int = 100, width: int = 10,
+              fill: str = "█", empty: str = "░") -> str:
+    """Render a small text progress bar."""
     filled = round(value / total * width) if total else 0
+    filled = max(0, min(width, filled))
     return fill * filled + empty * (width - filled)
 
-
-# ── AudioDirectoryTree ─────────────────────────────────────────────────────────
-
-class AudioDirectoryTree(DirectoryTree):
-    """DirectoryTree filtered to show only directories + audio files."""
-
-    def filter_paths(self, paths: Iterable[Path]) -> Iterable[Path]:
-        return [p for p in paths if p.is_dir() or p.suffix.lower() in AUDIO_EXTS]
-
-
-# ── ChangeBrowserRootScreen ────────────────────────────────────────────────────
-
-class ChangeBrowserRootScreen(ModalScreen[str | None]):
-    """M4: Modal that lets the user type a new library root directory."""
-
-    BINDINGS = [("escape", "cancel", "Cancel")]
-
-    def compose(self) -> ComposeResult:
-        with Vertical(id="chroot-dialog"):
-            yield Label("Change Library Root", id="chroot-title")
-            yield Label(
-                "Enter an absolute or ~ path to a directory:",
-                id="chroot-subtitle",
-            )
-            yield Input(placeholder="~/Music  or  /mnt/nas/audio", id="chroot-input")
-            with Horizontal(id="chroot-buttons"):
-                yield Button("Change", id="chroot-btn-ok", variant="primary")
-                yield Button("Cancel", id="chroot-btn-cancel")
-
-    def on_mount(self) -> None:
-        self.query_one("#chroot-input", Input).focus()
-
-    def on_input_submitted(self, _: Input.Submitted) -> None:
-        self._confirm()
-
-    def on_button_pressed(self, event: Button.Pressed) -> None:
-        if event.button.id == "chroot-btn-ok":
-            self._confirm()
-        else:
-            self.dismiss(None)
-
-    def action_cancel(self) -> None:
-        self.dismiss(None)
-
-    def _confirm(self) -> None:
-        raw = self.query_one("#chroot-input", Input).value.strip()
-        if not raw:
-            self.dismiss(None)
-            return
-        expanded = os.path.abspath(os.path.expanduser(raw))
-        if os.path.isdir(expanded):
-            self.dismiss(expanded)
-        else:
-            self.app.notify(f"Directory not found: {expanded}", severity="error", timeout=4)
-
-
-# ── Main App ───────────────────────────────────────────────────────────────────
 
 class MelodixApp(App):
     """Melodix — btop-style terminal music player (Gruvbox theme)."""
 
     CSS_PATH = _APP_DIR / "styles.css"
-    TITLE    = f"Melodix {__version__}"
+    TITLE = f"Melodix {__version__}"
 
     BINDINGS = [
         ("q",          "quit_app",           "Quit"),
@@ -150,7 +87,7 @@ class MelodixApp(App):
         ("shift+enter","play_selected",      "Play Selected"),
         ("y",          "youtube_dl",         "YouTube DL"),
         ("ctrl+r",     "refresh_library",    "Refresh Library"),
-        ("ctrl+b",     "change_browser_root","Change Root"),   # M4
+        ("ctrl+b",     "change_browser_root","Change Root"),
     ]
 
     # ── Reactives ──────────────────────────────────────────────────────────────
@@ -168,19 +105,22 @@ class MelodixApp(App):
         if "ansi_color" not in kwargs:
             kwargs["ansi_color"] = True
         super().__init__(**kwargs)
-        self.player = MpvPlayer(os.path.abspath(os.path.dirname(__file__)))
+        self.player = MpvPlayer()
         self.player.on_property_change = self._mpv_prop_cb
         self.player.on_end_file        = self._mpv_eof_cb
+        self.player.on_player_died     = self._mpv_died_cb
 
-        self.queue: List[Dict[str, Any]] = []
+        self.queue: list[dict] = []
         self.current_index = -1
+        # Guards against an infinite auto-skip loop when every track is broken.
+        self._consecutive_failures = 0
 
-        # M3: Load persisted settings and apply them before the first render
+        # Load persisted settings and apply them before the first render
         cfg = _cfg.load()
         self.shuffle_on  = cfg["shuffle"]
         self.repeat_mode = cfg["repeat_mode"]
 
-        # M3/M4: Resolve browser root (saved > ~/Music > ~/)
+        # Resolve the browser root (saved > ~/Music > ~)
         home  = os.path.expanduser("~")
         music = os.path.join(home, "Music")
         saved_root = cfg.get("browser_root", "")
@@ -230,43 +170,40 @@ class MelodixApp(App):
 
             # One-liner keybindings reference
             yield Label(
-                f"[{_BG2}]SPC[/{_BG2}][{_FG3}] play "
-                f"[{_BG2}]←→[/{_BG2}] seek "
-                f"[{_BG2}]+/-[/{_BG2}] vol "
-                f"[{_BG2}]n/p[/{_BG2}] skip "
-                f"[{_BG2}]s[/{_BG2}] shuf "
-                f"[{_BG2}]r[/{_BG2}] rpt "
-                f"[{_BG2}]a[/{_BG2}] add-dir "
-                f"[{_BG2}]⇧Ent[/{_BG2}] play-sel "
-                f"[{_BG2}]b[/{_BG2}] pl+ "
-                f"[{_BG2}]o[/{_BG2}] pl "
-                f"[{_BG2}]f/l[/{_BG2}] focus "
-                f"[{_BG2}]y[/{_BG2}][bold {_ORG}] YT↓[/] "
-                f"[{_BG2}]^R[/{_BG2}] ref "
-                f"[{_BG2}]^B[/{_BG2}] root "
-                f"[{_BG2}]q[/{_BG2}] quit[/{_FG3}]",
+                f"[{BG2}]SPC[/{BG2}][{FG3}] play "
+                f"[{BG2}]←→[/{BG2}] seek "
+                f"[{BG2}]+/-[/{BG2}] vol "
+                f"[{BG2}]n/p[/{BG2}] skip "
+                f"[{BG2}]s[/{BG2}] shuf "
+                f"[{BG2}]r[/{BG2}] rpt "
+                f"[{BG2}]a[/{BG2}] add-dir "
+                f"[{BG2}]⇧Ent[/{BG2}] play-sel "
+                f"[{BG2}]b[/{BG2}] pl+ "
+                f"[{BG2}]o[/{BG2}] pl "
+                f"[{BG2}]f/l[/{BG2}] focus "
+                f"[{BG2}]y[/{BG2}][bold {ORANGE}] YT↓[/] "
+                f"[{BG2}]^R[/{BG2}] ref "
+                f"[{BG2}]^B[/{BG2}] root "
+                f"[{BG2}]q[/{BG2}] quit[/{FG3}]",
                 id="keys-hint",
             )
 
     def on_mount(self) -> None:
-        # ── Panel border titles (btop style: ── Title ──) ─────────────────────
         root_name = Path(self.browser_root).name or str(self.browser_root)
-        self.query_one("#browser-panel").border_title = f"󰉋 Library  [{_GRY}]{root_name}[/]"
+        self.query_one("#browser-panel").border_title = f"󰉋 Library  [{GRAY}]{root_name}[/]"
         self.query_one("#queue-panel").border_title   = "󰋖 Queue"
         self.query_one("#bottom-bar").border_title    = "󰓎 Now Playing"
 
-        # ── Queue DataTable setup ──────────────────────────────────────────────
         table = self.query_one("#queue-list", DataTable)
         table.add_columns(" ", "Title", "Artist", "Time")
         table.cursor_type = "row"
 
-        # ── M3: Apply saved volume to mpv and display ──────────────────────────
-        cfg = _cfg.load()
-        saved_vol = int(cfg.get("volume", 100))
+        # Apply the saved volume to mpv and the display
+        saved_vol = int(_cfg.load().get("volume", 100))
         self.player.set_volume(saved_vol)
         self.current_volume = saved_vol
 
-        # ── Re-apply reactive-driven UI state (watchers may have no-op'd in __init__)
+        # Re-apply reactive-driven UI state (watchers no-op before mount)
         self.watch_shuffle_on(self.shuffle_on)
         self.watch_repeat_mode(self.repeat_mode)
 
@@ -275,23 +212,31 @@ class MelodixApp(App):
 
     # ── MPV callbacks ──────────────────────────────────────────────────────────
 
-    def _mpv_prop_cb(self, name: str, value: Any) -> None:
+    def _mpv_prop_cb(self, name: str, value) -> None:
         if self.is_running:
             try:
                 self.call_from_thread(self._handle_prop, name, value)
             except RuntimeError:
-                pass
+                log.debug("app not accepting mpv callbacks", exc_info=True)
 
     def _mpv_eof_cb(self, reason: str) -> None:
         if self.is_running:
             try:
                 self.call_from_thread(self._handle_eof, reason)
             except RuntimeError:
-                pass
+                log.debug("app not accepting mpv callbacks", exc_info=True)
 
-    def _handle_prop(self, name: str, value: Any) -> None:
+    def _mpv_died_cb(self) -> None:
+        if self.is_running:
+            try:
+                self.call_from_thread(self._handle_player_died)
+            except RuntimeError:
+                log.debug("app not accepting mpv callbacks", exc_info=True)
+
+    def _handle_prop(self, name: str, value) -> None:
         try:
             if name == "time-pos" and value is not None:
+                self._consecutive_failures = 0
                 self.current_time_str = format_time(value)
                 if self.player.duration > 0:
                     self.query_one("#progress-bar", ProgressBar).progress = float(value)
@@ -304,9 +249,8 @@ class MelodixApp(App):
                     if not t.get("duration_sec"):
                         t["duration_sec"] = float(value)
                         t["duration"]     = format_time(value)
-                        # H2: Targeted cell update — don't rebuild whole table for one value
                         self._update_cell(self.current_index, 3,
-                                          Text(t["duration"], style=f"{_AQU}"))
+                                          Text(t["duration"], style=AQUA))
 
             elif name == "metadata" and value and isinstance(value, dict):
                 self._apply_metadata(value)
@@ -326,20 +270,29 @@ class MelodixApp(App):
             elif name == "mute":
                 self.is_muted = bool(value)
 
-        except Exception:
-            pass
+        except Exception:  # noqa: BLE001 - a UI glitch must not kill playback
+            log.exception("error handling mpv property %r", name)
 
     def _handle_eof(self, reason: str) -> None:
-        # C1: Handle ALL end-of-file reasons, not just clean "eof".
-        # When mpv fails to load a file it sends reason="error", which previously
-        # left the queue permanently frozen on the broken track.
+        # Handle every end-of-file reason: a failed load reports reason="error",
+        # which would otherwise leave the queue frozen on the broken track.
         if reason == "eof":
             if self.repeat_mode == "track":
                 self.play_index(self.current_index)
             else:
                 self._next()
         elif reason in ("error", "aborted"):
-            # Auto-skip broken track and notify the user
+            self._consecutive_failures += 1
+            if self._consecutive_failures > max(1, len(self.queue)):
+                # Every track failed: stop instead of looping forever.
+                self.notify(
+                    "All tracks in the queue failed to play.",
+                    severity="error",
+                    timeout=5,
+                )
+                self._consecutive_failures = 0
+                self._stop_and_reset()
+                return
             title = ""
             if 0 <= self.current_index < len(self.queue):
                 title = self.queue[self.current_index].get("title", "")
@@ -350,9 +303,19 @@ class MelodixApp(App):
             )
             self._next()
 
+    def _handle_player_died(self) -> None:
+        """mpv exited or its socket closed while we were not shutting down."""
+        log.warning("audio engine stopped unexpectedly")
+        self.notify(
+            "Audio engine (mpv) stopped unexpectedly.",
+            severity="error",
+            timeout=6,
+        )
+        self._stop_and_reset()
+
     # ── Metadata ───────────────────────────────────────────────────────────────
 
-    def _apply_metadata(self, meta: Dict[str, Any]) -> None:
+    def _apply_metadata(self, meta: dict) -> None:
         def get(*keys):
             for k in keys:
                 for variant in (k, k.upper(), k.title()):
@@ -374,28 +337,23 @@ class MelodixApp(App):
         if 0 <= self.current_index < len(self.queue):
             self.queue[self.current_index]["title"]  = self.now_playing_title
             self.queue[self.current_index]["artist"] = self.now_playing_artist
-            # H2: Update only the two cells that changed, not the whole table
             idx = self.current_index
-            self._update_cell(idx, 1, Text(self.now_playing_title,  style=f"bold {_YEL}"))
-            self._update_cell(idx, 2, Text(self.now_playing_artist, style=f"{_FG1}"))
+            self._update_cell(idx, 1, Text(self.now_playing_title,  style=f"bold {YELLOW}"))
+            self._update_cell(idx, 2, Text(self.now_playing_artist, style=FG1))
 
         self._refresh_header()
 
     # ── Queue management ───────────────────────────────────────────────────────
 
-    def add_tracks(self, paths: List[str]) -> int:
-        """Batch-add multiple audio paths with a single DataTable rebuild (O(N) vs O(N^2))."""
+    def add_tracks(self, paths: list[str]) -> int:
+        """Batch-add audio paths with a single DataTable rebuild."""
         added = 0
         start_play = (self.current_index == -1 and not self.queue)
         first_added_idx = len(self.queue)
         for path in paths:
             if not os.path.exists(path):
                 continue
-            title = os.path.splitext(os.path.basename(path))[0]
-            self.queue.append({
-                "path": path, "title": title,
-                "artist": "", "duration": "--:--", "duration_sec": 0,
-            })
+            self.queue.append(make_track(path))
             added += 1
         if added:
             self._rebuild_queue()
@@ -417,7 +375,7 @@ class MelodixApp(App):
         tracks = []
         for root, _, files in os.walk(dir_path):
             for fname in sorted(files):
-                if Path(fname).suffix.lower() in AUDIO_EXTS:
+                if is_audio_file(fname):
                     tracks.append(os.path.join(root, fname))
         return self.add_tracks(tracks)
 
@@ -431,16 +389,15 @@ class MelodixApp(App):
         self.total_time_str   = "00:00"
         try:
             self.query_one("#progress-bar", ProgressBar).progress = 0
-        except Exception:
-            pass
+        except Exception:  # noqa: BLE001 - widget lifecycle
+            log.debug("could not reset progress bar", exc_info=True)
         self.play_icon = "󰏤"
         try:
             self.query_one("#visualizer", AudioVisualizer).set_state(
                 True, self.player.volume
             )
-        except Exception:
-            pass
-        # H2: Targeted row update instead of full table rebuild
+        except Exception:  # noqa: BLE001 - widget lifecycle
+            log.debug("could not update visualizer", exc_info=True)
         self._update_queue_playing_row(old_index, index)
         self._refresh_header()
 
@@ -463,7 +420,7 @@ class MelodixApp(App):
     def _prev(self) -> None:
         if not self.queue:
             return
-        # Standard media player UX: restart current track from beginning if > 3s in
+        # Standard media player UX: restart the track if we're past 3 seconds.
         if self.player.time_pos > 3.0:
             self.player.seek(0, relative=False)
             return
@@ -482,8 +439,8 @@ class MelodixApp(App):
         try:
             self.query_one("#progress-bar", ProgressBar).progress = 0
             self.query_one("#visualizer", AudioVisualizer).set_state(False, self.player.volume)
-        except Exception:
-            pass
+        except Exception:  # noqa: BLE001 - widget lifecycle
+            log.debug("could not reset player widgets", exc_info=True)
         self._rebuild_queue()
         self._refresh_header()
 
@@ -494,58 +451,75 @@ class MelodixApp(App):
         try:
             if self.now_playing_artist:
                 track_part = (
-                    f"[bold {_YEL}]{self.now_playing_title}[/]"
-                    f"  [{_BG3}]·[/]  [{_FG3}]{self.now_playing_artist}[/]"
+                    f"[bold {YELLOW}]{self.now_playing_title}[/]"
+                    f"  [{BG3}]·[/]  [{FG3}]{self.now_playing_artist}[/]"
                 )
             else:
-                track_part = f"[{_FG3}]{self.now_playing_title}[/]"
+                track_part = f"[{FG3}]{self.now_playing_title}[/]"
 
-            # State badge
             if self.current_index == -1:
-                state_badge = f"[{_GRY}]■ STOPPED[/]"
+                state_badge = f"[{GRAY}]■ STOPPED[/]"
             elif self.player.paused:
-                state_badge = f"[{_YEL}]⏸ PAUSED[/]"
+                state_badge = f"[{YELLOW}]⏸ PAUSED[/]"
             else:
-                state_badge = f"[bold {_GRN}]▶ PLAYING[/]"
+                state_badge = f"[bold {GREEN}]▶ PLAYING[/]"
 
             self.query_one("#header-bar", Label).update(
-                f"[bold {_ORG}]󰓎 MELODIX[/]"
-                f"  [{_BG3}]│[/]  {state_badge}"
-                f"  [{_BG3}]│[/]  [{_BLU}]󰎆[/]  {track_part}"
+                f"[bold {ORANGE}]󰓎 MELODIX[/]"
+                f"  [{BG3}]│[/]  {state_badge}"
+                f"  [{BG3}]│[/]  [{BLUE}]󰎆[/]  {track_part}"
             )
-        except Exception:
-            pass
+        except Exception:  # noqa: BLE001 - widget lifecycle
+            log.debug("could not refresh header", exc_info=True)
 
     def _update_queue_border_title(self) -> None:
-        """Updates the queue panel's border title with track count and mode icons."""
+        """Queue panel border title with track count and mode icons."""
         try:
             n = len(self.queue)
-            s_badge = f"[bold {_ORG}]󰒝[/]" if self.shuffle_on else f"[{_BG3}]󰒝[/]"
+            s_badge = f"[bold {ORANGE}]󰒝[/]" if self.shuffle_on else f"[{BG3}]󰒝[/]"
             r_badge = {
-                "none":  f"[{_BG3}]󰑖[/]",
-                "track": f"[bold {_ORG}]󰑘[/]",
-                "all":   f"[bold {_ORG}]󰑖[/]",
+                "none":  f"[{BG3}]󰑖[/]",
+                "track": f"[bold {ORANGE}]󰑘[/]",
+                "all":   f"[bold {ORANGE}]󰑖[/]",
             }[self.repeat_mode]
             self.query_one("#queue-panel").border_title = (
-                f"󰋖 Queue  [{_GRY}]{n} track{'s' if n != 1 else ''}[/]"
+                f"󰋖 Queue  [{GRAY}]{n} track{'s' if n != 1 else ''}[/]"
                 f"  {s_badge}  {r_badge}"
             )
-        except Exception:
-            pass
+        except Exception:  # noqa: BLE001 - widget lifecycle
+            log.debug("could not update queue title", exc_info=True)
 
     def _update_bottom_border_title(self) -> None:
-        """Updates the bottom panel's border title with elapsed/total time."""
-        # L2: Skip the update when nothing is playing — avoids constant string
-        # rebuilds every second while stopped.
+        """Bottom panel border title with elapsed/total time."""
         if self.current_index == -1:
             return
         try:
             self.query_one("#bottom-bar").border_title = (
-                f"[bold {_ORG}]󰓎[/]  [{_FG3}]{self.current_time_str}"
-                f" [bold {_YEL}]/[/] {self.total_time_str}[/]"
+                f"[bold {ORANGE}]󰓎[/]  [{FG3}]{self.current_time_str}"
+                f" [bold {YELLOW}]/[/] {self.total_time_str}[/]"
             )
-        except Exception:
-            pass
+        except Exception:  # noqa: BLE001 - widget lifecycle
+            log.debug("could not update bottom title", exc_info=True)
+
+    @staticmethod
+    def _marker(idx: int, active: bool) -> Text:
+        """Row marker: a play glyph for the active track, else its number."""
+        return Text("▶", style=f"bold {GREEN}") if active else Text(str(idx + 1), style=GRAY)
+
+    @staticmethod
+    def _row_cells(t: dict, active: bool) -> tuple[Text, Text, Text]:
+        """Build the title/artist/duration cells for a queue row."""
+        if active:
+            return (
+                Text(t["title"],    style=f"bold {YELLOW}"),
+                Text(t["artist"],   style=FG1),
+                Text(t["duration"], style=AQUA),
+            )
+        return (
+            Text(t["title"],    style=FG),
+            Text(t["artist"],   style=FG3),
+            Text(t["duration"], style=BG3),
+        )
 
     def _rebuild_queue(self) -> None:
         """Full table rebuild — use only for structural changes (add/remove)."""
@@ -554,62 +528,45 @@ class MelodixApp(App):
             table.clear()
             for idx, t in enumerate(self.queue):
                 active = (idx == self.current_index)
-                if active:
-                    marker = Text("▶",        style=f"bold {_GRN}")
-                    title  = Text(t["title"],  style=f"bold {_YEL}")
-                    artist = Text(t["artist"], style=f"{_FG1}")
-                    dur    = Text(t["duration"], style=f"{_AQU}")
-                else:
-                    marker = Text(str(idx + 1), style=_GRY)
-                    title  = Text(t["title"],   style=_FG)
-                    artist = Text(t["artist"],  style=_FG3)
-                    dur    = Text(t["duration"], style=_BG3)
-                table.add_row(marker, title, artist, dur, key=str(idx))
-        except Exception:
-            pass
+                title, artist, dur = self._row_cells(t, active)
+                table.add_row(self._marker(idx, active), title, artist, dur, key=str(idx))
+        except Exception:  # noqa: BLE001 - widget lifecycle
+            log.debug("could not rebuild queue table", exc_info=True)
 
     def _update_queue_playing_row(self, old_idx: int, new_idx: int) -> None:
-        """H2: Targeted update — only touch the two rows whose play state changed.
-
-        Avoids the O(n) full table rebuild that previously fired on every track
-        change (including metadata events), which caused visible lag on large queues.
-        Falls back to _rebuild_queue() on any error.
-        """
+        """Targeted update — only touch the two rows whose play state changed."""
         try:
             table = self.query_one("#queue-list", DataTable)
             if table.row_count != len(self.queue):
-                # Table is stale (e.g. after load) — need full rebuild
                 self._rebuild_queue()
                 return
 
-            # Restore old playing row to normal style
             if 0 <= old_idx < len(self.queue):
-                t = self.queue[old_idx]
-                table.update_cell_at(Coordinate(old_idx, 0), Text(str(old_idx + 1), style=_GRY))
-                table.update_cell_at(Coordinate(old_idx, 1), Text(t["title"],  style=_FG))
-                table.update_cell_at(Coordinate(old_idx, 2), Text(t["artist"], style=_FG3))
-                table.update_cell_at(Coordinate(old_idx, 3), Text(t["duration"], style=_BG3))
+                title, artist, dur = self._row_cells(self.queue[old_idx], False)
+                table.update_cell_at(Coordinate(old_idx, 0), self._marker(old_idx, False))
+                table.update_cell_at(Coordinate(old_idx, 1), title)
+                table.update_cell_at(Coordinate(old_idx, 2), artist)
+                table.update_cell_at(Coordinate(old_idx, 3), dur)
 
-            # Highlight new playing row
             if 0 <= new_idx < len(self.queue):
-                t = self.queue[new_idx]
-                table.update_cell_at(Coordinate(new_idx, 0), Text("▶",         style=f"bold {_GRN}"))
-                table.update_cell_at(Coordinate(new_idx, 1), Text(t["title"],  style=f"bold {_YEL}"))
-                table.update_cell_at(Coordinate(new_idx, 2), Text(t["artist"], style=f"{_FG1}"))
-                table.update_cell_at(Coordinate(new_idx, 3), Text(t["duration"], style=f"{_AQU}"))
+                title, artist, dur = self._row_cells(self.queue[new_idx], True)
+                table.update_cell_at(Coordinate(new_idx, 0), self._marker(new_idx, True))
+                table.update_cell_at(Coordinate(new_idx, 1), title)
+                table.update_cell_at(Coordinate(new_idx, 2), artist)
+                table.update_cell_at(Coordinate(new_idx, 3), dur)
                 table.move_cursor(row=new_idx, animate=True)
-        except Exception:
-            # Fallback: full rebuild on any unexpected error
+        except Exception:  # noqa: BLE001 - fall back to a full rebuild
+            log.debug("targeted row update failed; rebuilding", exc_info=True)
             self._rebuild_queue()
 
     def _update_cell(self, row: int, col: int, value: Text) -> None:
-        """H2: Safe single-cell update helper (used for metadata/duration changes)."""
+        """Safe single-cell update (used for metadata/duration changes)."""
         try:
             self.query_one("#queue-list", DataTable).update_cell_at(
                 Coordinate(row, col), value
             )
-        except Exception:
-            pass
+        except Exception:  # noqa: BLE001 - widget lifecycle
+            log.debug("could not update cell (%s,%s)", row, col, exc_info=True)
 
     # ── Reactive watchers ──────────────────────────────────────────────────────
 
@@ -617,45 +574,45 @@ class MelodixApp(App):
         try:
             self.query_one("#label-elapsed", Label).update(v)
             self._update_bottom_border_title()
-        except Exception:
-            pass
+        except Exception:  # noqa: BLE001 - widget lifecycle
+            log.debug("could not update elapsed label", exc_info=True)
 
     def watch_total_time_str(self, v: str) -> None:
         try:
             self.query_one("#label-duration", Label).update(v)
-        except Exception:
-            pass
+        except Exception:  # noqa: BLE001 - widget lifecycle
+            log.debug("could not update duration label", exc_info=True)
 
     def watch_current_volume(self, v: int) -> None:
         try:
-            bar   = _ascii_bar(v, fill="█", empty="░")
-            color = f"[{_RED}]" if self.is_muted else f"[{_AQU}]"
+            bar   = ascii_bar(v, fill="█", empty="░")
+            color = f"[{RED}]" if self.is_muted else f"[{AQUA}]"
             self.query_one("#vol-bar", Label).update(f"{color}{bar}[/]")
             self.query_one("#volume-display", Label).update(f"{v:3d}%")
-        except Exception:
-            pass
+        except Exception:  # noqa: BLE001 - widget lifecycle
+            log.debug("could not update volume display", exc_info=True)
 
     def watch_is_muted(self, v: bool) -> None:
         try:
             icon = "󰝟" if v else ("󰖀" if self.current_volume < 50 else "󰕾")
             self.query_one("#ctrl-mute", Button).label = icon
-        except Exception:
-            pass
+        except Exception:  # noqa: BLE001 - widget lifecycle
+            log.debug("could not update mute icon", exc_info=True)
         self.watch_current_volume(self.current_volume)
 
     def watch_play_icon(self, icon: str) -> None:
         try:
             self.query_one("#ctrl-play-pause", Button).label = icon
             self._refresh_header()
-        except Exception:
-            pass
+        except Exception:  # noqa: BLE001 - widget lifecycle
+            log.debug("could not update play icon", exc_info=True)
 
     def watch_shuffle_on(self, v: bool) -> None:
         try:
             btn = self.query_one("#ctrl-shuffle", Button)
             btn.add_class("-on") if v else btn.remove_class("-on")
-        except Exception:
-            pass
+        except Exception:  # noqa: BLE001 - widget lifecycle
+            log.debug("could not update shuffle button", exc_info=True)
         self._update_queue_border_title()
 
     def watch_repeat_mode(self, mode: str) -> None:
@@ -663,8 +620,8 @@ class MelodixApp(App):
             btn = self.query_one("#ctrl-repeat", Button)
             btn.label = {"none": "󰑖", "track": "󰑘", "all": "󰑖"}[mode]
             btn.add_class("-on") if mode != "none" else btn.remove_class("-on")
-        except Exception:
-            pass
+        except Exception:  # noqa: BLE001 - widget lifecycle
+            log.debug("could not update repeat button", exc_info=True)
         self._update_queue_border_title()
 
     # ── Actions ────────────────────────────────────────────────────────────────
@@ -678,25 +635,40 @@ class MelodixApp(App):
         elif self.queue:
             self.play_index(0)
 
-    def action_seek_forward(self)  -> None:
-        if self.current_index != -1: self.player.seek(5)
+    def action_seek_forward(self) -> None:
+        if self.current_index != -1:
+            self.player.seek(5)
 
     def action_seek_backward(self) -> None:
-        if self.current_index != -1: self.player.seek(-5)
+        if self.current_index != -1:
+            self.player.seek(-5)
 
-    def action_volume_up(self)     -> None: self.player.set_volume(self.player.volume + 5)
-    def action_volume_down(self)   -> None: self.player.set_volume(self.player.volume - 5)
-    def action_next_track(self)    -> None: self._next()
-    def action_prev_track(self)    -> None: self._prev()
-    def action_toggle_mute(self)   -> None: self.player.toggle_mute()
+    def action_volume_up(self) -> None:
+        self.player.set_volume(self.player.volume + 5)
+
+    def action_volume_down(self) -> None:
+        self.player.set_volume(self.player.volume - 5)
+
+    def action_next_track(self) -> None:
+        self._next()
+
+    def action_prev_track(self) -> None:
+        self._prev()
+
+    def action_toggle_mute(self) -> None:
+        self.player.toggle_mute()
 
     def action_focus_browser(self) -> None:
-        try: self.query_one("#dir-tree").focus()
-        except Exception: pass
+        try:
+            self.query_one("#dir-tree").focus()
+        except Exception:  # noqa: BLE001 - widget lifecycle
+            log.debug("could not focus browser", exc_info=True)
 
     def action_focus_queue(self) -> None:
-        try: self.query_one("#queue-list").focus()
-        except Exception: pass
+        try:
+            self.query_one("#queue-list").focus()
+        except Exception:  # noqa: BLE001 - widget lifecycle
+            log.debug("could not focus queue", exc_info=True)
 
     def action_toggle_shuffle(self) -> None:
         self.shuffle_on = not self.shuffle_on
@@ -709,15 +681,14 @@ class MelodixApp(App):
         try:
             tree = self.query_one("#dir-tree", AudioDirectoryTree)
             panel = self.query_one("#browser-panel")
-            panel.border_title = f"[bold {_YEL}]󰉋 Library  ↻ refreshing…[/]"
+            panel.border_title = f"[bold {YELLOW}]󰉋 Library  ↻ refreshing…[/]"
             await tree.reload()
             root_name = Path(self.browser_root).name or str(self.browser_root)
-            panel.border_title = f"󰉋 Library  [{_GRY}]{root_name}[/]"
-        except Exception:
-            pass
+            panel.border_title = f"󰉋 Library  [{GRAY}]{root_name}[/]"
+        except Exception:  # noqa: BLE001 - widget lifecycle
+            log.debug("could not refresh library", exc_info=True)
 
     def action_add_dir(self) -> None:
-        # M1: Give the user clear feedback when there's nothing to add
         try:
             tree = self.query_one("#dir-tree", AudioDirectoryTree)
             node = tree.cursor_node
@@ -734,10 +705,8 @@ class MelodixApp(App):
                     severity="warning",
                     timeout=3,
                 )
-        except Exception:
-            pass
-
-    # M4: Change browser root at runtime ───────────────────────────────────────
+        except Exception:  # noqa: BLE001 - widget lifecycle
+            log.debug("could not add directory", exc_info=True)
 
     def action_change_browser_root(self) -> None:
         """Open the Change Library Root dialog (Ctrl+B)."""
@@ -747,18 +716,19 @@ class MelodixApp(App):
         if not new_root:
             return
         self.browser_root = new_root
-        _cfg.save({**_cfg.load(), "browser_root": new_root})
+        if not _cfg.save({**_cfg.load(), "browser_root": new_root}):
+            self.notify("Could not save the new library root.", severity="warning", timeout=4)
         try:
             tree = self.query_one("#dir-tree", AudioDirectoryTree)
             panel = self.query_one("#browser-panel")
-            panel.border_title = f"[bold {_YEL}]󰉋 Library  ↻ loading…[/]"
+            panel.border_title = f"[bold {YELLOW}]󰉋 Library  ↻ loading…[/]"
             tree.path = Path(new_root)
             await tree.reload()
             root_name = Path(new_root).name or str(new_root)
-            panel.border_title = f"󰉋 Library  [{_GRY}]{root_name}[/]"
+            panel.border_title = f"󰉋 Library  [{GRAY}]{root_name}[/]"
             self.notify(f"Library root: {root_name}", timeout=3)
-        except Exception:
-            pass
+        except Exception:  # noqa: BLE001 - widget lifecycle
+            log.debug("could not apply new browser root", exc_info=True)
 
     def action_youtube_dl(self) -> None:
         """Open the YouTube download modal."""
@@ -772,37 +742,37 @@ class MelodixApp(App):
     def action_remove_track(self) -> None:
         try:
             table = self.query_one("#queue-list", DataTable)
-            if table.cursor_row is not None and self.queue:
-                idx = table.cursor_row
-                if 0 <= idx < len(self.queue):
-                    was_playing = (idx == self.current_index)
-                    del self.queue[idx]
-                    if was_playing:
-                        self._stop_and_reset()
-                        if self.queue:
-                            self.play_index(min(idx, len(self.queue) - 1))
-                    else:
-                        if idx < self.current_index:
-                            self.current_index -= 1
-                        self._rebuild_queue()
-                        self._update_queue_border_title()
+            if table.cursor_row is None or not self.queue:
+                return
+            idx = table.cursor_row
+            if not (0 <= idx < len(self.queue)):
+                return
 
-                    # Move cursor to the track after the deleted one (not back to row 0)
-                    try:
-                        new_cursor = min(idx, len(self.queue) - 1)
-                        if new_cursor >= 0:
-                            table.move_cursor(row=new_cursor)
-                    except Exception:
-                        pass
-        except Exception:
-            pass
+            was_playing = (idx == self.current_index)
+            del self.queue[idx]
+            if was_playing:
+                self._stop_and_reset()
+                if self.queue:
+                    self.play_index(min(idx, len(self.queue) - 1))
+            else:
+                if idx < self.current_index:
+                    self.current_index -= 1
+                self._rebuild_queue()
+                self._update_queue_border_title()
+
+            # Move the cursor to the track after the deleted one.
+            new_cursor = min(idx, len(self.queue) - 1)
+            if new_cursor >= 0:
+                table.move_cursor(row=new_cursor)
+        except Exception:  # noqa: BLE001 - widget lifecycle
+            log.debug("could not remove track", exc_info=True)
 
     def action_open_playlists(self) -> None:
         """Open the Playlists Manager modal screen."""
         self.push_screen(PlaylistScreen(self.queue), self._on_playlist_dismissed)
 
     def _on_playlist_dismissed(self, result: dict | None) -> None:
-        """Callback when the Playlists Manager is closed. Loads/appends tracks."""
+        """Callback when the Playlists Manager closes; loads/appends tracks."""
         if not result:
             return
         action = result.get("action")
@@ -823,7 +793,7 @@ class MelodixApp(App):
                 self.play_index(0)
 
     def action_add_to_playlist(self) -> None:
-        """Add the currently highlighted song (Library browser or Queue list) to a playlist."""
+        """Add the highlighted Library or Queue track to a playlist."""
         track = None
         tree  = self.query_one("#dir-tree", AudioDirectoryTree)
         table = self.query_one("#queue-list", DataTable)
@@ -832,25 +802,24 @@ class MelodixApp(App):
             node = tree.cursor_node
             if node and node.data and not node.data.path.is_dir():
                 path = str(node.data.path)
-                if Path(path).suffix.lower() in AUDIO_EXTS:
-                    title = os.path.splitext(os.path.basename(path))[0]
-                    track = {
-                        "path": path, "title": title,
-                        "artist": "", "duration": "--:--", "duration_sec": 0,
-                    }
-        elif table.has_focus or not tree.has_focus:
-            if table.cursor_row is not None and self.queue:
-                idx = table.cursor_row
-                if 0 <= idx < len(self.queue):
-                    track = self.queue[idx]
+                if is_audio_file(path):
+                    track = make_track(path)
+        elif table.cursor_row is not None and self.queue:
+            idx = table.cursor_row
+            if 0 <= idx < len(self.queue):
+                track = self.queue[idx]
 
         if track:
             self.push_screen(AddToPlaylistScreen(track))
         else:
-            self.notify("No track selected. Highlight a track in the Library or Queue first.", severity="warning", timeout=3)
+            self.notify(
+                "No track selected. Highlight a track in the Library or Queue first.",
+                severity="warning",
+                timeout=3,
+            )
 
     def action_play_selected(self) -> None:
-        """Play the currently highlighted folder or file immediately."""
+        """Play the highlighted folder or file immediately."""
         try:
             tree = self.query_one("#dir-tree", AudioDirectoryTree)
             table = self.query_one("#queue-list", DataTable)
@@ -860,112 +829,137 @@ class MelodixApp(App):
                 if node and node.data:
                     path = str(node.data.path)
                     if node.data.path.is_dir():
-                        # Collect tracks FIRST before clearing queue to prevent data loss
+                        # Collect tracks first so a failure can't lose the queue.
                         tracks_to_add = []
                         for root, _, files in os.walk(path):
                             for fname in sorted(files):
-                                if Path(fname).suffix.lower() in AUDIO_EXTS:
+                                if is_audio_file(fname):
                                     tracks_to_add.append(os.path.join(root, fname))
 
                         if not tracks_to_add:
                             name = node.data.path.name or str(node.data.path)
-                            self.notify(f"No audio files found in {name}", severity="warning", timeout=3)
+                            self.notify(f"No audio files found in {name}",
+                                        severity="warning", timeout=3)
                             return
 
                         self._stop_and_reset()
                         self.queue.clear()
-                        for track_path in tracks_to_add:
-                            title = os.path.splitext(os.path.basename(track_path))[0]
-                            self.queue.append({
-                                "path": track_path, "title": title,
-                                "artist": "", "duration": "--:--", "duration_sec": 0,
-                            })
+                        self.queue.extend(make_track(p) for p in tracks_to_add)
                         self._rebuild_queue()
                         self._update_queue_border_title()
                         self.play_index(0)
-                    else:
-                        # Play file: clear queue, add track, play it
-                        if Path(path).suffix.lower() in AUDIO_EXTS:
-                            self._stop_and_reset()
-                            self.queue.clear()
-                            self.add_to_queue(path)
+                    elif is_audio_file(path):
+                        self._stop_and_reset()
+                        self.queue.clear()
+                        self.add_to_queue(path)
             elif table.has_focus and table.cursor_row is not None and self.queue:
                 idx = table.cursor_row
                 if 0 <= idx < len(self.queue):
                     self.play_index(idx)
-        except Exception:
-            pass
+        except Exception:  # noqa: BLE001 - widget lifecycle
+            log.debug("could not play selection", exc_info=True)
 
     # ── Widget events ──────────────────────────────────────────────────────────
 
     def on_button_pressed(self, event: Button.Pressed) -> None:
-        bid = event.button.id
-        if   bid == "ctrl-play-pause": self.action_toggle_play()
-        elif bid == "ctrl-next":       self.action_next_track()
-        elif bid == "ctrl-prev":       self.action_prev_track()
-        elif bid == "ctrl-shuffle":    self.action_toggle_shuffle()
-        elif bid == "ctrl-repeat":     self.action_toggle_repeat()
-        elif bid == "ctrl-mute":       self.action_toggle_mute()
+        actions = {
+            "ctrl-play-pause": self.action_toggle_play,
+            "ctrl-next": self.action_next_track,
+            "ctrl-prev": self.action_prev_track,
+            "ctrl-shuffle": self.action_toggle_shuffle,
+            "ctrl-repeat": self.action_toggle_repeat,
+            "ctrl-mute": self.action_toggle_mute,
+        }
+        action = actions.get(event.button.id)
+        if action:
+            action()
 
-    def on_directory_tree_file_selected(
-        self, event: DirectoryTree.FileSelected
-    ) -> None:
+    def on_directory_tree_file_selected(self, event: DirectoryTree.FileSelected) -> None:
         path = str(event.path)
-        if Path(path).suffix.lower() in AUDIO_EXTS:
+        if is_audio_file(path):
             self.add_to_queue(path)
         event.stop()
 
-    def on_data_table_row_selected(
-        self, event: DataTable.RowSelected
-    ) -> None:
+    def on_data_table_row_selected(self, event: DataTable.RowSelected) -> None:
         try:
             self.play_index(int(event.row_key.value))
-        except Exception:
-            pass
+        except (TypeError, ValueError):
+            log.debug("could not resolve selected row %r", event.row_key, exc_info=True)
         event.stop()
 
     def on_unmount(self) -> None:
-        # M3: Persist user settings on clean exit so they survive restart
-        _cfg.save({
+        # Persist user settings on clean exit so they survive a restart.
+        if not _cfg.save({
             "volume":      int(self.player.volume),
             "shuffle":     self.shuffle_on,
             "repeat_mode": self.repeat_mode,
             "browser_root": self.browser_root,
-        })
+        }):
+            log.warning("could not persist settings on exit")
         self.player.close()
 
 
+def _configure_logging() -> None:
+    """Log to ~/.cache/melodix/melodix.log, falling back to silent."""
+    logger = logging.getLogger("melodix")
+    logger.setLevel(logging.INFO)
+    if logger.handlers:
+        return
+    try:
+        log_dir = Path(os.path.expanduser("~/.cache/melodix"))
+        log_dir.mkdir(parents=True, exist_ok=True)
+        handler: logging.Handler = logging.FileHandler(log_dir / "melodix.log", encoding="utf-8")
+        handler.setFormatter(logging.Formatter(
+            "%(asctime)s %(levelname)s %(name)s: %(message)s"
+        ))
+    except OSError:
+        handler = logging.NullHandler()
+    logger.addHandler(handler)
+
+
+def _print_help() -> None:
+    print(f"Melodix {__version__} — btop-style terminal music player")
+    print("\nUsage:")
+    print("  melodix [OPTIONS]")
+    print("\nOptions:")
+    print("  -h, --help     Show this help message and exit")
+    print("  -V, --version  Show version information and exit")
+    print("\nKeybindings:")
+    print("  Space        Play / Pause")
+    print("  ← / →        Seek -5s / +5s")
+    print("  + / -        Volume Up / Down")
+    print("  n / p        Next / Previous track (or restart song if >3s)")
+    print("  s / r        Toggle Shuffle / Repeat mode")
+    print("  m            Toggle Mute")
+    print("  f / l        Focus Library browser / Queue table")
+    print("  a            Add highlighted directory to queue")
+    print("  Shift+Enter  Play selected directory or track immediately")
+    print("  Delete       Remove selected track from queue")
+    print("  b            Add track to playlist")
+    print("  o            Open playlists manager")
+    print("  y            Download YouTube URL (video or playlist) as MP3")
+    print("  Ctrl+R       Refresh library file tree")
+    print("  Ctrl+B       Change library root directory")
+    print("  q            Quit")
+
+
 def run_app() -> None:
-    # M6: Support --version / -V flag without launching the TUI
+    """Console-script entry point."""
     if "--version" in sys.argv or "-V" in sys.argv:
         print(f"Melodix {__version__}")
         return
     if "--help" in sys.argv or "-h" in sys.argv:
-        print(f"Melodix {__version__} — btop-style terminal music player")
-        print("\nUsage:")
-        print("  melodix [OPTIONS]")
-        print("\nOptions:")
-        print("  -h, --help     Show this help message and exit")
-        print("  -V, --version  Show version information and exit")
-        print("\nKeybindings:")
-        print("  Space        Play / Pause")
-        print("  ← / →        Seek -5s / +5s")
-        print("  + / -        Volume Up / Down")
-        print("  n / p        Next / Previous track (or restart song if >3s)")
-        print("  s / r        Toggle Shuffle / Repeat mode")
-        print("  m            Toggle Mute")
-        print("  f / l        Focus Library browser / Queue table")
-        print("  a            Add highlighted directory to queue")
-        print("  Shift+Enter  Play selected directory or track immediately")
-        print("  Delete       Remove selected track from queue")
-        print("  b            Add track to playlist")
-        print("  o            Open playlists manager")
-        print("  y            Download YouTube URL (video or playlist) as MP3")
-        print("  Ctrl+R       Refresh library file tree")
-        print("  Ctrl+B       Change library root directory")
-        print("  q            Quit")
+        _print_help()
         return
-    MelodixApp().run()
+
+    _configure_logging()
+    try:
+        app = MelodixApp()
+    except RuntimeError as exc:
+        # Most commonly: mpv is not installed.
+        print(f"Melodix could not start: {exc}", file=sys.stderr)
+        raise SystemExit(1) from exc
+    app.run()
 
 
 if __name__ == "__main__":

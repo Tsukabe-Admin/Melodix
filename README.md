@@ -2,7 +2,8 @@
 
 Melodix is a premium, modern, and highly customized Terminal User Interface (TUI) music player for Linux, built using Python's modern **Textual** framework and powered by the **mpv** audio engine via IPC sockets. It is designed to match system monitors like `btop` with a rich **Gruvbox dark** theme, rounded panel layouts, transparent background integration, and a custom procedural audio visualizer.
 
-![Melodix Preview](https://cdn.discordapp.com/attachments/662288171240783895/1514714910565732533/image.png?ex=6a2c5fb0&is=6a2b0e30&hm=ea9a8cadf4d9b25186794157f7738887ce8bf516594ec6b3ff7ad9ff3cd165c4&) 
+<!-- Preview screenshot: add docs/preview.png and uncomment below -->
+<!-- ![Melodix Preview](docs/preview.png) --> 
 ---
 
 ##  Features
@@ -43,7 +44,7 @@ Melodix is a premium, modern, and highly customized Terminal User Interface (TUI
 
 ### Prerequisites
 
-Ensure you have python (>= 3.9), `mpv`, and `ffmpeg` installed on your system.
+Ensure you have python (>= 3.10), `mpv`, and `ffmpeg` installed on your system.
 
 ```bash
 # Arch Linux
@@ -73,5 +74,43 @@ sudo apt install mpv ffmpeg python3
    ```bash
    melodix
    ```
+   `python -m melodix` works too.
 
-# Melodix
+---
+
+## Development
+
+Install the dev extras (pytest, pytest-asyncio, ruff):
+
+```bash
+pip install -e ".[dev]"
+pytest          # 70+ unit and headless-integration tests (mpv tests auto-skip)
+ruff check .    # lint
+```
+
+The tests redirect `HOME` to a temporary directory, so they never touch your
+real config or playlists.
+
+### Project layout
+
+| Module | Responsibility |
+| :--- | :--- |
+| `main.py` | `MelodixApp`: queue state machine, actions, keybindings, entry point |
+| `player.py` | mpv subprocess + JSON-IPC socket, property cache, reader thread |
+| `downloader.py` | yt-dlp subprocess + stdout state machine (video/playlist → MP3) |
+| `models.py` | `Track` type, `make_track()`, `format_time()`, audio extensions |
+| `theme.py` | Gruvbox palette shared by every module that emits Rich markup |
+| `browser.py` | Filtered library `DirectoryTree` |
+| `widgets.py` | Reusable widgets (e.g. `PlaylistItem`) |
+| `playlists.py` / `config.py` | Persistent JSON stores (playlists, settings) |
+| `playlists_screen.py`, `add_to_playlist.py`, `youtube_screen.py`, `change_root_screen.py` | Modal screens |
+
+### Runtime files
+
+| Path | Contents |
+| :--- | :--- |
+| `~/.config/melodix/config.json` | Volume, shuffle/repeat mode, browser root |
+| `~/.config/melodix/playlists/*.json` | Saved playlists |
+| `~/.cache/melodix/melodix.log` | Diagnostic log (warnings/errors) |
+
+If Melodix misbehaves, that log is the first place to look.

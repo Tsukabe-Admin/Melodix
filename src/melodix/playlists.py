@@ -1,68 +1,106 @@
-import os
+"""playlists.py — persistent, user-named track playlists stored as JSON.
+
+Playlist names are sanitised before they touch the filesystem so a name can
+never escape the playlists directory. All mutating helpers return ``bool`` so
+the UI can tell the user when a write did not happen.
+"""
+from __future__ import annotations
+
 import json
+import logging
+import os
 from pathlib import Path
-from typing import List, Dict, Any
+from typing import Any
+
+from .models import make_track
+
+log = logging.getLogger(__name__)
 
 DEFAULT_PLAYLISTS_DIR = os.path.expanduser("~/.config/melodix/playlists")
+
 
 def ensure_playlists_dir() -> str:
     os.makedirs(DEFAULT_PLAYLISTS_DIR, exist_ok=True)
     return DEFAULT_PLAYLISTS_DIR
 
-def list_playlists() -> List[str]:
-    """Returns a list of playlist names (without the .json extension)."""
-    ensure_playlists_dir()
-    playlists = []
-    if os.path.exists(DEFAULT_PLAYLISTS_DIR):
-        for f in os.listdir(DEFAULT_PLAYLISTS_DIR):
-            if f.endswith(".json"):
-                playlists.append(f[:-5])
-    return sorted(playlists)
+
+def list_playlists() -> list[str]:
+    """Return playlist names (without the ``.json`` extension), sorted."""
+    try:
+        ensure_playlists_dir()
+        names = [
+            f[:-5] for f in os.listdir(DEFAULT_PLAYLISTS_DIR) if f.endswith(".json")
+        ]
+    except OSError:
+        log.warning("could not list playlists in %s", DEFAULT_PLAYLISTS_DIR, exc_info=True)
+        return []
+    return sorted(names)
+
+
+def sanitize_playlist_name(name: str) -> str:
+    """Return the safe on-disk playlist name (without extension)."""
+    safe_name = "".join(
+        c for c in name if c.isalpha() or c.isdigit() or c in (" ", "-", "_")
+    ).strip()
+    return safe_name or "untitled"
+
 
 def get_playlist_path(name: str) -> str:
     ensure_playlists_dir()
-    # Sanitize the name to prevent path traversal
-    safe_name = "".join([c for c in name if c.isalpha() or c.isdigit() or c in (" ", "-", "_")]).strip()
-    if not safe_name:
-        safe_name = "untitled"
-    return os.path.join(DEFAULT_PLAYLISTS_DIR, f"{safe_name}.json")
+    return os.path.join(DEFAULT_PLAYLISTS_DIR, f"{sanitize_playlist_name(name)}.json")
 
-def load_playlist(name: str) -> List[Dict[str, Any]]:
-    """Loads tracks from a playlist file, validating each track's fields."""
+
+def _coerce_track(raw: Any) -> dict[str, Any] | None:
+    """Validate one raw playlist entry, returning ``None`` if it is unusable."""
+    if not isinstance(raw, dict):
+        return None
+    track_path = raw.get("path")
+    if not isinstance(track_path, str) or not track_path:
+        return None
+    try:
+        duration_sec = float(raw.get("duration_sec") or 0)
+    except (TypeError, ValueError):
+        duration_sec = 0.0
+    return make_track(
+        track_path,
+        title=str(raw.get("title") or Path(track_path).stem),
+        artist=str(raw.get("artist") or ""),
+        duration=str(raw.get("duration") or "--:--"),
+        duration_sec=duration_sec,
+    )
+
+
+def load_playlist(name: str) -> list[dict[str, Any]]:
+    """Load and validate a playlist, skipping individual corrupt entries."""
     path = get_playlist_path(name)
     if not os.path.exists(path):
         return []
     try:
-        with open(path, "r", encoding="utf-8") as f:
+        with open(path, encoding="utf-8") as f:
             data = json.load(f)
-            if isinstance(data, dict):
-                raw_tracks = data.get("tracks", [])
-            elif isinstance(data, list):
-                raw_tracks = data
-            else:
-                return []
+    except (OSError, ValueError):
+        log.warning("could not read playlist %s", path, exc_info=True)
+        return []
 
-        validated = []
-        for t in raw_tracks:
-            if not isinstance(t, dict):
-                continue
-            track_path = t.get("path")
-            if not isinstance(track_path, str) or not track_path:
-                continue  # Skip tracks with missing or non-string path
-            validated.append({
-                "path":         track_path,
-                "title":        str(t.get("title") or Path(track_path).stem),
-                "artist":       str(t.get("artist") or ""),
-                "duration":     str(t.get("duration") or "--:--"),
-                "duration_sec": float(t.get("duration_sec") or 0),
-            })
-        return validated
-    except Exception:
-        pass
-    return []
+    if isinstance(data, dict):
+        raw_tracks = data.get("tracks", [])
+    elif isinstance(data, list):
+        raw_tracks = data
+    else:
+        return []
 
-def save_playlist(name: str, tracks: List[Dict[str, Any]]) -> None:
-    """Saves tracks to a playlist file."""
+    validated = []
+    for raw in raw_tracks:
+        track = _coerce_track(raw)
+        if track is None:
+            log.debug("skipping malformed track in playlist %s: %r", name, raw)
+            continue
+        validated.append(track)
+    return validated
+
+
+def save_playlist(name: str, tracks: list[dict[str, Any]]) -> bool:
+    """Atomically save tracks to a playlist. Returns ``True`` on success."""
     path = get_playlist_path(name)
     data = {
         "name": name,
@@ -72,40 +110,48 @@ def save_playlist(name: str, tracks: List[Dict[str, Any]]) -> None:
                 "title": t["title"],
                 "artist": t.get("artist", ""),
                 "duration": t.get("duration", "--:--"),
-                "duration_sec": t.get("duration_sec", 0)
+                "duration_sec": t.get("duration_sec", 0),
             }
             for t in tracks
-        ]
+        ],
     }
     tmp_path = f"{path}.tmp"
     try:
         with open(tmp_path, "w", encoding="utf-8") as f:
             json.dump(data, f, indent=2, ensure_ascii=False)
         os.replace(tmp_path, path)
-    except Exception:
-        if os.path.exists(tmp_path):
-            try:
-                os.remove(tmp_path)
-            except Exception:
-                pass
-
-def delete_playlist(name: str) -> None:
-    """Deletes a playlist file."""
-    path = get_playlist_path(name)
-    if os.path.exists(path):
+        return True
+    except OSError:
+        log.warning("could not save playlist %s", path, exc_info=True)
         try:
-            os.remove(path)
-        except Exception:
+            if os.path.exists(tmp_path):
+                os.remove(tmp_path)
+        except OSError:
             pass
+        return False
 
-def add_track_to_playlist(name: str, track: Dict[str, Any]) -> None:
-    """Adds a single track to an existing playlist."""
+
+def delete_playlist(name: str) -> bool:
+    """Delete a playlist file. Returns ``True`` if it no longer exists."""
+    path = get_playlist_path(name)
+    try:
+        os.remove(path)
+        return True
+    except FileNotFoundError:
+        return True
+    except OSError:
+        log.warning("could not delete playlist %s", path, exc_info=True)
+        return False
+
+
+def add_track_to_playlist(name: str, track: dict[str, Any]) -> bool:
+    """Append a single track to a playlist, creating it if necessary."""
     tracks = load_playlist(name)
     tracks.append({
         "path": track["path"],
         "title": track["title"],
         "artist": track.get("artist", ""),
         "duration": track.get("duration", "--:--"),
-        "duration_sec": track.get("duration_sec", 0)
+        "duration_sec": track.get("duration_sec", 0),
     })
-    save_playlist(name, tracks)
+    return save_playlist(name, tracks)

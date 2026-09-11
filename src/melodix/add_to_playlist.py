@@ -1,42 +1,44 @@
+"""add_to_playlist.py — modal to add a track to an existing or new playlist."""
+from __future__ import annotations
+
+import logging
+
 from textual.app import ComposeResult
+from textual.binding import Binding
+from textual.containers import Horizontal, Vertical
 from textual.screen import ModalScreen
-from textual.containers import Vertical, Horizontal
-from textual.widgets import Label, Button, Input, ListView, ListItem
-from .playlists import list_playlists, add_track_to_playlist
+from textual.widgets import Button, Input, Label, ListView
 
+from .playlists import add_track_to_playlist, list_playlists
+from .widgets import PlaylistItem
 
-class PlaylistItem(ListItem):
-    """Custom ListItem storing playlist_name directly, avoiding invalid DOM IDs."""
-
-    def __init__(self, playlist_name: str, **kwargs):
-        super().__init__(Label(f"󰎆  {playlist_name}"), **kwargs)
-        self.playlist_name = playlist_name
+log = logging.getLogger(__name__)
 
 
 class AddToPlaylistScreen(ModalScreen[str | None]):
     """Modal dialog to select a playlist to add a track to, or create a new one."""
 
-    def __init__(self, track: dict, **kwargs):
+    BINDINGS = [Binding("escape", "cancel", "Cancel", show=False)]
+
+    def __init__(self, track: dict, **kwargs) -> None:
         super().__init__(**kwargs)
         self.track = track
 
     def compose(self) -> ComposeResult:
-        playlists = list_playlists()
-        
         with Vertical(id="add-pl-dialog"):
             yield Label("Add Track to Playlist", id="add-pl-title")
             yield Label(f"Track: {self.track['title']}", id="add-pl-track-info")
-            
+
             yield Label("Choose Playlist:", classes="add-pl-label")
             with ListView(id="add-pl-list"):
-                for pl in playlists:
+                for pl in list_playlists():
                     yield PlaylistItem(pl)
-            
+
             yield Label("Or Create New Playlist:", classes="add-pl-label")
             with Horizontal(id="add-pl-new-row"):
                 yield Input(placeholder="Playlist Name...", id="add-pl-new-input")
                 yield Button("Create", id="add-pl-btn-create", variant="primary")
-            
+
             with Horizontal(id="add-pl-actions"):
                 yield Button("Cancel", id="add-pl-btn-cancel")
 
@@ -45,9 +47,7 @@ class AddToPlaylistScreen(ModalScreen[str | None]):
 
     def on_list_view_selected(self, event: ListView.Selected) -> None:
         if isinstance(event.item, PlaylistItem):
-            playlist_name = event.item.playlist_name
-            add_track_to_playlist(playlist_name, self.track)
-            self.dismiss(playlist_name)
+            self._add_to(event.item.playlist_name)
 
     def on_button_pressed(self, event: Button.Pressed) -> None:
         bid = event.button.id
@@ -60,11 +60,23 @@ class AddToPlaylistScreen(ModalScreen[str | None]):
         if event.input.id == "add-pl-new-input":
             self._create_and_add()
 
+    def action_cancel(self) -> None:
+        self.dismiss(None)
+
+    def _add_to(self, playlist_name: str) -> None:
+        if add_track_to_playlist(playlist_name, self.track):
+            self.dismiss(playlist_name)
+        else:
+            self.app.notify(
+                f"Could not add to '{playlist_name}'. Check that ~/.config is writable.",
+                severity="error",
+                timeout=5,
+            )
+
     def _create_and_add(self) -> None:
         name_input = self.query_one("#add-pl-new-input", Input)
         name = name_input.value.strip()
-        if name:
-            add_track_to_playlist(name, self.track)
-            self.dismiss(name)
-        else:
+        if not name:
             name_input.focus()
+            return
+        self._add_to(name)

@@ -1,7 +1,6 @@
-"""
-downloader.py — YouTube → MP3 backend using yt-dlp + ffmpeg.
+"""downloader.py — YouTube → MP3 backend built on yt-dlp + ffmpeg.
 
-Supports single videos AND playlists. Runs entirely in a daemon thread.
+Supports single videos and playlists. Runs entirely in a daemon thread.
 
 Callback contract:
   on_progress(pct, status, item_num, total_items)
@@ -17,19 +16,35 @@ Callback contract:
       Called once at the very end with the list of all downloaded paths.
 
   on_error(msg)
-      Called on fatal error. Download stops.
+      Called on fatal error, or on cancellation after a partial download.
+      Download stops.
 """
+from __future__ import annotations
+
+import logging
 import os
 import re
 import shutil
+import signal
 import subprocess
 import threading
+import time
+from collections.abc import Callable
 from pathlib import Path
-from typing import Callable, List, Optional
 
+log = logging.getLogger(__name__)
 
 # Default output directory
 DEFAULT_MUSIC_DIR = str(Path.home() / "Music" / "Melodix")
+
+# Kernel inode timestamps can lag the wall clock by up to one tick, so a file
+# this download just wrote can look older than its start time. Allow slack.
+_MTIME_SLACK_SECONDS = 2.0
+
+ProgressCallback = Callable[[float, str, int, int], None]
+DoneCallback = Callable[[str], None]
+AllDoneCallback = Callable[[list[str]], None]
+ErrorCallback = Callable[[str], None]
 
 
 def _find_ytdlp() -> str:
@@ -55,20 +70,36 @@ def _find_ffmpeg() -> str:
     return path
 
 
-class DownloadJob:
-    """Represents an active download session. Call .cancel() to abort."""
+def _terminate_proc(proc: subprocess.Popen | None) -> None:
+    """Terminate a yt-dlp process *and its children* (e.g. ffmpeg).
 
-    def __init__(self):
-        self._proc: Optional[subprocess.Popen] = None
+    yt-dlp is started in its own session, so signalling the process group
+    avoids orphaning an in-flight ffmpeg that is still writing a file.
+    """
+    if proc is None or proc.poll() is not None:
+        return
+    try:
+        if hasattr(os, "killpg"):
+            os.killpg(os.getpgid(proc.pid), signal.SIGTERM)
+        else:  # pragma: no cover - non-POSIX
+            proc.terminate()
+    except (ProcessLookupError, PermissionError, OSError):
+        try:
+            proc.terminate()
+        except OSError:
+            log.debug("could not terminate yt-dlp", exc_info=True)
+
+
+class DownloadJob:
+    """Handle for an active download session. Call :meth:`cancel` to abort."""
+
+    def __init__(self) -> None:
+        self._proc: subprocess.Popen | None = None
         self._cancelled = threading.Event()
 
-    def cancel(self):
+    def cancel(self) -> None:
         self._cancelled.set()
-        if self._proc and self._proc.poll() is None:
-            try:
-                self._proc.terminate()
-            except Exception:
-                pass
+        _terminate_proc(self._proc)
 
     @property
     def cancelled(self) -> bool:
@@ -78,20 +109,20 @@ class DownloadJob:
 def download_url(
     url: str,
     output_dir: str = DEFAULT_MUSIC_DIR,
-    on_progress: Optional[Callable[[float, str, int, int], None]] = None,
-    on_done: Optional[Callable[[str], None]] = None,
-    on_all_done: Optional[Callable[[List[str]], None]] = None,
-    on_error: Optional[Callable[[str], None]] = None,
+    on_progress: ProgressCallback | None = None,
+    on_done: DoneCallback | None = None,
+    on_all_done: AllDoneCallback | None = None,
+    on_error: ErrorCallback | None = None,
 ) -> DownloadJob:
-    """
-    Start a background download of a YouTube URL (video or playlist) as MP3(s).
+    """Start a background download of a YouTube URL (video or playlist) as MP3(s).
 
-    Returns a DownloadJob handle; call .cancel() to abort mid-download.
+    Returns a :class:`DownloadJob`; call ``.cancel()`` to abort mid-download.
     """
     job = DownloadJob()
     thread = threading.Thread(
         target=_run_download,
         args=(url, output_dir, on_progress, on_done, on_all_done, on_error, job),
+        name="melodix-download",
         daemon=True,
     )
     thread.start()
@@ -100,83 +131,97 @@ def download_url(
 
 # ── Internal ───────────────────────────────────────────────────────────────────
 
+def _resolve_output_dir(output_dir: str) -> str:
+    """Expand the output dir and clamp it to within the user's home directory."""
+    resolved = os.path.abspath(os.path.expanduser(output_dir))
+    home_dir = os.path.abspath(os.path.expanduser("~"))
+    if not resolved.startswith(home_dir + os.sep) and resolved != home_dir:
+        log.warning("output dir %s is outside %s; using default", resolved, home_dir)
+        return DEFAULT_MUSIC_DIR
+    return resolved
+
+
+def _build_command(ytdlp: str, output_dir: str, url: str) -> list[str]:
+    return [
+        ytdlp,
+        "--newline",
+        "--progress",
+        # Download ONLY the best audio stream (much faster than video).
+        "-f", "bestaudio/best",
+        # Four concurrent fragments speeds up the download.
+        "-N", "4",
+        # Extract audio to mp3.
+        "-x",
+        "--audio-format", "mp3",
+        "--audio-quality", "0",
+        "--embed-thumbnail",
+        "--add-metadata",
+        "--parse-metadata", "%(title)s:%(meta_title)s",
+        # --windows-filenames strips truly dangerous characters (/ \ : * ? " < > |)
+        # without turning spaces into underscores.
+        "--windows-filenames",
+        "-o", os.path.join(output_dir, "%(title)s.%(ext)s"),
+        url,
+    ]
+
+
 def _run_download(
     url: str,
     output_dir: str,
-    on_progress: Optional[Callable],
-    on_done: Optional[Callable],
-    on_all_done: Optional[Callable],
-    on_error: Optional[Callable],
+    on_progress: ProgressCallback | None,
+    on_done: DoneCallback | None,
+    on_all_done: AllDoneCallback | None,
+    on_error: ErrorCallback | None,
     job: DownloadJob,
-):
+) -> None:
     try:
         ytdlp = _find_ytdlp()
         _find_ffmpeg()
 
-        output_dir = os.path.abspath(os.path.expanduser(output_dir))
-
-        # ── Security: clamp output directory to within the user's home ──────────
-        home_dir = os.path.abspath(os.path.expanduser("~"))
-        if not output_dir.startswith(home_dir + os.sep) and output_dir != home_dir:
-            output_dir = DEFAULT_MUSIC_DIR
-
+        output_dir = _resolve_output_dir(output_dir)
         os.makedirs(output_dir, exist_ok=True)
+
+        # Only files modified after this point belong to *this* download. The
+        # slack absorbs the kernel's coarse inode-timestamp granularity.
+        start_time = time.time() - _MTIME_SLACK_SECONDS
 
         _notify(on_progress, 0.0, "Fetching info…", 0, 0)
 
-        # ── Security & Sanitization: strip whitespace and validate scheme ─────
         url = url.strip()
-        url_lower = url.lower()
-        if not (url_lower.startswith("https://") or url_lower.startswith("http://")):
+        if not url.lower().startswith(("https://", "http://")):
             _notify(on_error, "Only http:// and https:// URLs are supported.")
             return
 
-        cmd = [
-            ytdlp,
-            "--newline",
-            "--progress",
-            # Download ONLY the best audio stream (much faster than downloading video)
-            "-f", "bestaudio/best",
-            # Use 4 concurrent fragments to speed up download speed
-            "-N", "4",
-            # Extract audio to mp3
-            "-x",
-            "--audio-format", "mp3",
-            "--audio-quality", "0",
-            "--embed-thumbnail",
-            "--add-metadata",
-            "--parse-metadata", "%(title)s:%(meta_title)s",
-            # H3: --windows-filenames strips truly dangerous chars (/ \ : * ? " < > |)
-            # without converting spaces to underscores like --restrict-filenames did.
-            # This keeps "My Favourite Song.mp3" readable while preventing path traversal.
-            "--windows-filenames",
-            # Simple flat template: ~/Music/Melodix/<Title>.ext
-            "-o", os.path.join(output_dir, "%(title)s.%(ext)s"),
-            url,
-        ]
+        cmd = _build_command(ytdlp, output_dir, url)
+        log.debug("starting yt-dlp: %s", " ".join(cmd))
+
+        if job.cancelled:  # cancelled while we were still setting up
+            _notify(on_error, "Download cancelled.")
+            return
 
         job._proc = subprocess.Popen(
             cmd,
             stdout=subprocess.PIPE,
             stderr=subprocess.STDOUT,
             text=True,
+            encoding="utf-8",
+            errors="replace",
             bufsize=1,
+            # Own session so cancel() can signal yt-dlp's ffmpeg children too.
+            start_new_session=hasattr(os, "killpg"),
         )
 
-        # ── State machine ──────────────────────────────────────────────────────
-        current_item: int = 0       # 1-based; 0 = single video / unknown
-        total_items:  int = 0       # 0 = single video / unknown
-        current_path: Optional[str] = None
-        converting:   bool = False
-        completed:    List[str] = []
+        current_item = 0        # 1-based; 0 = single video / unknown
+        total_items = 0         # 0 = single video / unknown
+        current_path: str | None = None
+        converting = False
+        completed: list[str] = []
 
         for raw_line in job._proc.stdout:
             if job.cancelled:
                 break
-
             line = raw_line.strip()
 
-            # ── Playlist detection ─────────────────────────────────────────────
             # "Playlist Foo: Downloading 12 items of 12"
             pl_total = re.search(r"Playlist .+?: Downloading (\d+) items? of \d+", line)
             if pl_total:
@@ -185,29 +230,28 @@ def _run_download(
             # "[download] Downloading item 3 of 12"
             item_match = re.search(r"\[download\] Downloading item (\d+) of (\d+)", line)
             if item_match:
-                new_item  = int(item_match.group(1))
+                new_item = int(item_match.group(1))
                 total_items = int(item_match.group(2))
 
-                # If we just finished the previous item, fire on_done for it
+                # Moving on to a new item means the previous one is finished.
                 if current_path and new_item > current_item:
                     _fire_item_done(current_path, completed, on_done)
                     current_path = None
-                    converting   = False
+                    converting = False
 
                 current_item = new_item
-                _notify(on_progress, 0.0,
-                        f"Track {current_item}/{total_items}  •  fetching info…",
-                        current_item, total_items)
+                _notify(
+                    on_progress, 0.0,
+                    f"Track {current_item}/{total_items}  •  fetching info…",
+                    current_item, total_items,
+                )
                 continue
 
-            # ── Destination detection ──────────────────────────────────────────
-            # M2: Match ANY Destination line (not just .mp3) so we can track the
-            # intermediate file path too. Only accept it as current_path once we
-            # confirm it ends with .mp3 (the final output after audio extraction).
-            dest_match = re.search(
-                r"\[(?:ExtractAudio|ffmpeg|Merger|MoveFiles)\] Destination: (.+)",
-                line,
-            )
+            # Any bracketed postprocessor/download "Destination" line. Only the
+            # final .mp3 path is tracked. Matching `[download]` as well is
+            # important: when the bestaudio stream is already mp3, yt-dlp does
+            # not run ExtractAudio and this is the only line naming the file.
+            dest_match = re.search(r"\[[^\]]+\] Destination: (.+)", line)
             if dest_match:
                 dest_path = dest_match.group(1).strip()
                 if dest_path.lower().endswith(".mp3"):
@@ -215,30 +259,26 @@ def _run_download(
 
             # "[download] /path/file.mp3 has already been downloaded"
             already_match = re.search(
-                r"\[download\] (.+\.mp3) has already been downloaded",
-                line,
+                r"\[download\] (.+\.mp3) has already been downloaded", line
             )
             if already_match:
-                path = already_match.group(1).strip()
-                _fire_item_done(path, completed, on_done)
+                _fire_item_done(already_match.group(1).strip(), completed, on_done)
                 current_path = None
-                converting   = False
+                converting = False
                 continue
 
-            # ── Per-track download progress ────────────────────────────────────
+            # Per-track download progress, scaled to 0–85 (the rest is conversion).
             pct_match = re.search(r"\[download\]\s+([\d.]+)%", line)
             if pct_match:
                 pct = float(pct_match.group(1))
-                # Scale raw pct to 0–85 (reserve 85–100 for conversion phase)
-                scaled = pct * 0.85
                 if total_items > 1:
                     label = f"Track {current_item}/{total_items}  •  {pct:.0f}%"
                 else:
                     label = f"Downloading… {pct:.0f}%"
-                _notify(on_progress, scaled, label, current_item, total_items)
+                _notify(on_progress, pct * 0.85, label, current_item, total_items)
                 continue
 
-            # ── Conversion / metadata stages ───────────────────────────────────
+            # Conversion / metadata stages.
             if "[ExtractAudio]" in line or "[ffmpeg]" in line:
                 if not converting:
                     converting = True
@@ -257,33 +297,61 @@ def _run_download(
                 _notify(on_progress, 95.0, label, current_item, total_items)
                 continue
 
-        job._proc.wait()
+        proc = job._proc
+        if job.cancelled:
+            _terminate_proc(proc)
+        try:
+            proc.wait(timeout=10)
+        except subprocess.TimeoutExpired:
+            log.warning("yt-dlp did not exit; killing it")
+            _terminate_proc(proc)
+            try:
+                proc.wait(timeout=5)
+            except subprocess.TimeoutExpired:  # pragma: no cover - unkillable
+                log.error("yt-dlp could not be killed")
+        finally:
+            # Drain/close the pipe so the fd is not retained until GC.
+            try:
+                if proc.stdout:
+                    proc.stdout.close()
+            except OSError:
+                pass
+
+        returncode = proc.returncode
 
         if job.cancelled:
             _notify(on_error, f"Download cancelled. ({len(completed)} track(s) saved.)")
             return
 
-        if job._proc.returncode != 0 and not completed:
-            _notify(on_error, f"yt-dlp exited with code {job._proc.returncode}.")
+        if returncode != 0 and not completed:
+            _notify(on_error, f"yt-dlp exited with code {returncode}.")
             return
 
-        # Fire on_done for the last item (or only item for single videos)
+        # Fire on_done for the final item.
+        fired_last = False
         if current_path and os.path.exists(current_path):
-            _fire_item_done(current_path, completed, on_done)
-        elif not current_path:
-            # Fallback: pick the most recently modified MP3 not already completed
-            mp3s = sorted(
-                Path(output_dir).glob("*.mp3"),
-                key=lambda p: p.stat().st_mtime,
-                reverse=True,
-            )
-            for mp3 in mp3s:
-                if str(mp3) not in completed:
-                    _fire_item_done(str(mp3), completed, on_done)
-                    break
+            fired_last = _fire_item_done(current_path, completed, on_done)
+
+        if not fired_last:
+            # The destination line may have been missing or stale (e.g. a file
+            # that was renamed). Fall back to the newest MP3 created by *this*
+            # download that we have not already reported.
+            _claim_newest_new_mp3(output_dir, start_time, completed, on_done)
 
         if not completed:
             _notify(on_error, "Download finished but no MP3 files were found.")
+            return
+
+        # A nonzero exit after some tracks were saved means the batch was only
+        # partially successful — deliver what we have, but say so.
+        partial_failure = returncode != 0
+        if partial_failure:
+            _notify(on_all_done, list(completed))
+            _notify(
+                on_error,
+                f"{len(completed)} track(s) saved, but yt-dlp exited with code "
+                f"{returncode} — some items may have failed.",
+            )
             return
 
         count = len(completed)
@@ -292,22 +360,58 @@ def _run_download(
         else:
             _notify(on_progress, 100.0, f"Done! {count} tracks downloaded.", count, count)
 
-        _notify(on_all_done, completed)
+        _notify(on_all_done, list(completed))
 
-    except Exception as exc:
+    except Exception as exc:  # noqa: BLE001 - reported to the UI, never raised
+        log.exception("download failed")
         _notify(on_error, str(exc))
 
 
-def _fire_item_done(path: str, completed: List[str], on_done: Optional[Callable]):
-    """Add path to completed list and fire on_done callback."""
+def _claim_newest_new_mp3(
+    output_dir: str,
+    start_time: float,
+    completed: list[str],
+    on_done: DoneCallback | None,
+) -> str | None:
+    """Report the most recent MP3 created after ``start_time`` and not yet claimed."""
+    try:
+        candidates = sorted(
+            Path(output_dir).glob("*.mp3"),
+            key=lambda p: p.stat().st_mtime,
+            reverse=True,
+        )
+    except OSError:
+        log.debug("could not scan %s for downloaded mp3s", output_dir, exc_info=True)
+        return None
+
+    for mp3 in candidates:
+        if str(mp3) in completed:
+            continue
+        try:
+            if mp3.stat().st_mtime < start_time:
+                continue
+        except OSError:
+            continue
+        _fire_item_done(str(mp3), completed, on_done)
+        return str(mp3)
+    return None
+
+
+def _fire_item_done(
+    path: str, completed: list[str], on_done: DoneCallback | None
+) -> bool:
+    """Record a completed track and fire ``on_done``. Returns ``True`` if fired."""
     if path and os.path.exists(path) and path not in completed:
         completed.append(path)
         _notify(on_done, path)
+        return True
+    return False
 
 
-def _notify(cb: Optional[Callable], *args):
-    if cb:
-        try:
-            cb(*args)
-        except Exception:
-            pass
+def _notify(cb: Callable[..., None] | None, *args: object) -> None:
+    if cb is None:
+        return
+    try:
+        cb(*args)
+    except Exception:  # noqa: BLE001 - callbacks are UI code
+        log.exception("error in download callback %r", cb)

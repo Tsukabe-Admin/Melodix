@@ -7,7 +7,7 @@ name = "melodix"
 version = "1.0.0"
 description = "Melodix — btop-style terminal music player"
 readme = "README.md"
-requires-python = ">=3.9"
+requires-python = ">=3.10"
 dependencies = [
     "textual>=8.0.0",
     "rich>=13.0.0",
@@ -15,7 +15,13 @@ dependencies = [
 ]
 
 [project.optional-dependencies]
-dev = ["build", "twine"]
+dev = [
+    "build",
+    "twine",
+    "pytest>=8.0",
+    "pytest-asyncio>=0.24",
+    "ruff>=0.6",
+]
 
 [project.urls]
 Repository = "https://github.com/Tsukabe-Admin/Melodix"
@@ -29,3 +35,15 @@ packages = ["melodix"]
 
 [tool.setuptools.package-data]
 "melodix" = ["styles.css"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+asyncio_mode = "auto"
+
+[tool.ruff]
+line-length = 100
+target-version = "py310"
+
+[tool.ruff.lint]
+select = ["E4", "E7", "E9", "F", "B", "I", "UP", "C4", "SIM"]
+ignore = ["E501"]

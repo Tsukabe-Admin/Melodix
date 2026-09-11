@@ -1,10 +1,12 @@
-"""
-youtube_screen.py — Textual ModalScreen for YouTube → MP3 downloads.
+"""youtube_screen.py — modal for downloading YouTube URLs as MP3.
 
-Supports single videos and full playlists. Opens with 'y'.
-Tracks are added to the queue one-by-one as each finishes.
+Supports single videos and full playlists. Opens with 'y'. Tracks are added to
+the queue in one batch when the modal dismisses.
 """
 from __future__ import annotations
+
+import logging
+import os
 
 from textual.app import ComposeResult
 from textual.binding import Binding
@@ -13,35 +15,24 @@ from textual.screen import ModalScreen
 from textual.widgets import Button, Input, Label, ProgressBar
 
 from .downloader import DownloadJob, download_url
+from .theme import BLUE, FG, FG3, GREEN, ORANGE, RED, YELLOW
 
-# ── Gruvbox colours ────────────────────────────────────────────────────────────
-_YEL = "#fabd2f"
-_BLU = "#83a598"
-_GRN = "#b8bb26"
-_RED = "#fb4934"
-_ORG = "#fe8019"
-_FG  = "#ebdbb2"
-_FG3 = "#a89984"
-_BG  = "#282828"
-_BG1 = "#3c3836"
-_BG2 = "#504945"
-_BG3 = "#665c54"
+log = logging.getLogger(__name__)
 
 
 class YoutubeScreen(ModalScreen[list[str] | None]):
-    """
-    Modal dialog for downloading YouTube URLs (videos or playlists) as MP3s.
+    """Modal dialog for downloading YouTube URLs (videos or playlists) as MP3s.
 
     Dismisses with:
         list[str] — absolute paths of all downloaded MP3s (success)
-        None      — user cancelled or fatal error
+        None      — user cancelled or nothing was downloaded
     """
 
     BINDINGS = [
         Binding("escape", "cancel", "Cancel", show=False),
     ]
 
-    def __init__(self):
+    def __init__(self) -> None:
         super().__init__()
         self._job: DownloadJob | None = None
         self._done = False
@@ -53,16 +44,13 @@ class YoutubeScreen(ModalScreen[list[str] | None]):
 
     def compose(self) -> ComposeResult:
         with Vertical(id="yt-dialog"):
-            yield Label(
-                f"[bold {_ORG}]󰗃  YouTube → MP3[/]",
-                id="yt-title",
-            )
-            yield Label(f"[{_FG3}]Video / Playlist URL:[/]", id="yt-url-label")
+            yield Label(f"[bold {ORANGE}]󰗃  YouTube → MP3[/]", id="yt-title")
+            yield Label(f"[{FG3}]Video / Playlist URL:[/]", id="yt-url-label")
             yield Input(
                 placeholder="https://www.youtube.com/watch?v=…  or  playlist?list=…",
                 id="yt-url-input",
             )
-            yield Label(f"[{_FG3}]Save Directory:[/]", id="yt-dir-label")
+            yield Label(f"[{FG3}]Save Directory:[/]", id="yt-dir-label")
             yield Input(
                 value="~/Music/Melodix",
                 placeholder="~/Music/Melodix",
@@ -83,16 +71,13 @@ class YoutubeScreen(ModalScreen[list[str] | None]):
 
             with Horizontal(id="yt-buttons"):
                 yield Button("Download", id="yt-btn-download", variant="primary")
-                yield Button("Cancel",   id="yt-btn-cancel",  variant="default")
+                yield Button("Cancel", id="yt-btn-cancel", variant="default")
 
     def on_mount(self) -> None:
         self.query_one("#yt-url-input", Input).focus()
-        # Hide overall progress until we know it's a playlist
         self._set_overall_visible(False)
-        pb = self.query_one("#yt-track-progress", ProgressBar)
-        pb.total = 100
-        overall = self.query_one("#yt-overall-progress", ProgressBar)
-        overall.total = 100
+        self.query_one("#yt-track-progress", ProgressBar).total = 100
+        self.query_one("#yt-overall-progress", ProgressBar).total = 100
 
     # ── Input / Button events ──────────────────────────────────────────────────
 
@@ -112,25 +97,42 @@ class YoutubeScreen(ModalScreen[list[str] | None]):
             self._job.cancel()
         if not self._done:
             self._done = True
+            # Keep whatever finished before cancelling.
             self.dismiss(self._all_paths if self._all_paths else None)
 
     # ── Download logic ─────────────────────────────────────────────────────────
 
+    def _reset_progress_state(self) -> None:
+        """Clear per-attempt state so a retry starts from a clean slate."""
+        self._done = False
+        self._total_items = 0
+        self._completed_items = 0
+        self._all_paths = []
+        self._set_overall_visible(False)
+        try:
+            self.query_one("#yt-overall-progress", ProgressBar).progress = 0
+        except Exception:  # noqa: BLE001 - widget may not be mounted yet
+            log.debug("could not reset overall progress bar", exc_info=True)
+
     def _start_download(self) -> None:
         url = self.query_one("#yt-url-input", Input).value.strip()
         if not url:
-            self._set_status(f"[{_RED}]Please enter a URL.[/]")
+            self._set_status(f"[{RED}]Please enter a URL.[/]")
             return
 
         out_dir = self.query_one("#yt-dir-input", Input).value.strip()
         if not out_dir:
-            self._set_status(f"[{_RED}]Please enter a save directory.[/]")
+            self._set_status(f"[{RED}]Please enter a save directory.[/]")
             return
+
+        # A failed attempt leaves the controls enabled for a retry; make sure
+        # the counters and accumulated paths from that attempt are discarded.
+        self._reset_progress_state()
 
         self.query_one("#yt-url-input", Input).disabled = True
         self.query_one("#yt-dir-input", Input).disabled = True
         self.query_one("#yt-btn-download", Button).disabled = True
-        self._set_status(f"[{_BLU}]Starting…[/]")
+        self._set_status(f"[{BLUE}]Starting…[/]")
         self._set_track_progress(0, "Fetching info…")
 
         self._job = download_url(
@@ -163,21 +165,15 @@ class YoutubeScreen(ModalScreen[list[str] | None]):
 
     def _on_progress_ui(self, percent: float, status: str,
                         item_num: int, total_items: int) -> None:
-        # Show/hide the overall progress bar once we know it's a playlist
-        if total_items > 1 and self._total_items == 0:
-            self._total_items = total_items
-            self._set_overall_visible(True)
-            try:
-                self.query_one("#yt-overall-progress", ProgressBar).total = float(total_items)
-            except Exception:
-                pass
-
+        # Show the overall bar once we know it is a playlist. It uses a 0-100
+        # percent scale (total stays 100), so do NOT set total to total_items.
         if total_items > 1:
+            if self._total_items == 0:
+                self._set_overall_visible(True)
             self._total_items = total_items
 
         self._set_track_progress(percent, status)
 
-        # Update overall bar based on completed + in-progress fraction
         if self._total_items > 1:
             overall_pct = (
                 self._completed_items + (percent / 100)
@@ -195,38 +191,33 @@ class YoutubeScreen(ModalScreen[list[str] | None]):
                 self._total_items,
             )
             self._set_status(
-                f"[{_GRN}]✓  {self._completed_items}/{self._total_items} saved[/]"
-                f"  [{_FG3}]{_short_path(path)}[/]"
+                f"[{GREEN}]✓  {self._completed_items}/{self._total_items} saved[/]"
+                f"  [{FG3}]{_short_path(path)}[/]"
             )
         else:
-            self._set_status(
-                f"[{_GRN}]✓  Saved:[/]  [{_FG3}]{_short_path(path)}[/]"
-            )
+            self._set_status(f"[{GREEN}]✓  Saved:[/]  [{FG3}]{_short_path(path)}[/]")
 
     def _on_all_done_ui(self, paths: list[str]) -> None:
         if self._done:
             return
         count = len(paths)
-        if count == 1:
-            summary = "1 track downloaded."
-        else:
-            summary = f"{count} tracks downloaded."
-        self._set_track_progress(100, f"[bold {_GRN}]Done! {summary}[/]")
+        summary = "1 track downloaded." if count == 1 else f"{count} tracks downloaded."
+        self._set_track_progress(100, f"[bold {GREEN}]Done! {summary}[/]")
         if self._total_items > 1:
             self._set_overall_progress(100, count, count)
-        # Brief pause so the user sees the Done state before the modal closes
+        # Brief pause so the user sees the Done state before the modal closes.
         self.set_timer(1.4, lambda: self._finish(paths))
 
     def _on_error_ui(self, msg: str) -> None:
         self._set_track_progress(0, "")
-        self._set_status(f"[bold {_RED}]✗  Error:[/]  [{_FG}]{msg}[/]")
-        # Re-enable so the user can correct the URL/dir and try again
+        self._set_status(f"[bold {RED}]✗  Error:[/]  [{FG}]{msg}[/]")
+        # Re-enable so the user can correct the URL/dir and try again.
         try:
             self.query_one("#yt-url-input", Input).disabled = False
             self.query_one("#yt-dir-input", Input).disabled = False
             self.query_one("#yt-btn-download", Button).disabled = False
-        except Exception:
-            pass
+        except Exception:  # noqa: BLE001 - dialog may already be closing
+            log.debug("could not re-enable download controls", exc_info=True)
 
     def _finish(self, paths: list[str]) -> None:
         if not self._done:
@@ -239,40 +230,35 @@ class YoutubeScreen(ModalScreen[list[str] | None]):
         try:
             self.query_one("#yt-track-progress", ProgressBar).progress = float(percent)
             if label:
-                self.query_one("#yt-track-label", Label).update(
-                    f"[{_BLU}]{label}[/]"
-                )
-        except Exception:
-            pass
+                self.query_one("#yt-track-label", Label).update(f"[{BLUE}]{label}[/]")
+        except Exception:  # noqa: BLE001 - defensive; widget lifecycle
+            log.debug("could not update track progress", exc_info=True)
 
-    def _set_overall_progress(self, percent: float,
-                               done: int, total: int) -> None:
+    def _set_overall_progress(self, percent: float, done: int, total: int) -> None:
         try:
-            pb = self.query_one("#yt-overall-progress", ProgressBar)
-            pb.progress = float(percent)
+            self.query_one("#yt-overall-progress", ProgressBar).progress = float(percent)
             self.query_one("#yt-overall-label", Label).update(
-                f"[{_FG3}]Overall  [{_YEL}]{done}[/] / [{_YEL}]{total}[/] tracks[/]"
+                f"[{FG3}]Overall  [{YELLOW}]{done}[/] / [{YELLOW}]{total}[/] tracks[/]"
             )
-        except Exception:
-            pass
+        except Exception:  # noqa: BLE001 - defensive; widget lifecycle
+            log.debug("could not update overall progress", exc_info=True)
 
     def _set_status(self, markup: str) -> None:
         try:
             self.query_one("#yt-status", Label).update(markup)
-        except Exception:
-            pass
+        except Exception:  # noqa: BLE001 - defensive; widget lifecycle
+            log.debug("could not update status label", exc_info=True)
 
     def _set_overall_visible(self, visible: bool) -> None:
         try:
             display = "block" if visible else "none"
             self.query_one("#yt-overall-label", Label).styles.display = display
             self.query_one("#yt-overall-progress", ProgressBar).styles.display = display
-        except Exception:
-            pass
+        except Exception:  # noqa: BLE001 - defensive; widget lifecycle
+            log.debug("could not toggle overall progress visibility", exc_info=True)
 
 
 def _short_path(path: str, max_len: int = 48) -> str:
     """Trim a path for display in the status line."""
-    import os
     name = os.path.basename(path)
     return name if len(name) <= max_len else name[:max_len - 1] + "…"

@@ -1,12 +1,15 @@
 import math
 import random
-from textual.widget import Widget
+
 from rich.text import Text
+from textual.widget import Widget
+
+from .theme import AQUA, BG1, BG2, FG, RED, WHITE, YELLOW
 
 # Gruvbox palette for the visualizer
-_LOW  = "#8ec07c"   # aqua   – quiet
-_MID  = "#fabd2f"   # yellow – medium
-_HIGH = "#fb4934"   # red    – loud
+_LOW = AQUA     # quiet
+_MID = YELLOW   # medium
+_HIGH = RED     # loud
 
 _WRAP_PERIOD = 260 * math.pi  # Exact least common multiple of all harmonic periods (1.0, 0.5, 1.3, 0.2)
 
@@ -97,10 +100,10 @@ class AudioVisualizer(Widget):
 
                     # Apply reflection sheen highlight on the bar itself
                     if is_sheen:
-                        style = "bold #ffffff"
+                        style = f"bold {WHITE}"
                         ch = "█"
                     elif is_sheen_soft:
-                        style = "bold #ebdbb2"
+                        style = f"bold {FG}"
                     else:
                         style = f"bold {color}"
 
@@ -109,9 +112,9 @@ class AudioVisualizer(Widget):
                     # I2: Empty cells — use dim foreground only; no background
                     # paint needed since the Screen background is transparent.
                     if is_sheen:
-                        text.append("╱", style="#504945")
+                        text.append("╱", style=BG2)
                     elif is_sheen_soft:
-                        text.append("·", style="#3c3836")
+                        text.append("·", style=BG1)
                     else:
                         text.append(" ")  # plain space, zero cost
 

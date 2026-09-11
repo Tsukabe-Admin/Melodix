@@ -1,56 +1,60 @@
-from textual.app import ComposeResult
-from textual.screen import ModalScreen
-from textual.containers import Horizontal, Vertical
-from textual.widgets import Label, Button, Input, ListView, ListItem, DataTable
+"""playlists_screen.py — modal for managing, loading and deleting playlists."""
+from __future__ import annotations
+
+import logging
+
 from rich.text import Text
-from .playlists import list_playlists, load_playlist, save_playlist, delete_playlist
+from textual.app import ComposeResult
+from textual.containers import Horizontal, Vertical
+from textual.screen import ModalScreen
+from textual.widgets import Button, DataTable, Input, Label, ListView
 
+from .playlists import (
+    delete_playlist,
+    list_playlists,
+    load_playlist,
+    sanitize_playlist_name,
+    save_playlist,
+)
+from .theme import AQUA, FG, FG3
+from .widgets import PlaylistItem
 
-class PlaylistItem(ListItem):
-    """Custom ListItem that stores the playlist name directly, avoiding invalid DOM IDs."""
-
-    def __init__(self, playlist_name: str, **kwargs):
-        super().__init__(Label(f"󰎆  {playlist_name}"), **kwargs)
-        self.playlist_name = playlist_name
+log = logging.getLogger(__name__)
 
 
 class PlaylistScreen(ModalScreen[dict | None]):
     """Modal screen for managing, loading, appending, and deleting playlists."""
 
-    def __init__(self, current_queue: list, **kwargs):
+    def __init__(self, current_queue: list, **kwargs) -> None:
         super().__init__(**kwargs)
-        # L4: Copy the list — don't hold an alias to the live queue so that
-        # tracks added by a background download after the modal opens are NOT
-        # silently included in a Save Queue operation.
+        # Copy the list: don't alias the live queue, so tracks added by a
+        # background download after the modal opens are not silently saved.
         self.current_queue = list(current_queue)
-        self.selected_playlist = None
-        # H4: Track the last name the user tried to overwrite for double-press confirm
+        self.selected_playlist: str | None = None
+        # Last name the user tried to overwrite, for double-press confirmation.
         self._overwrite_confirm: str | None = None
 
-    def compose(self) -> ComposeResult:
-        playlists = list_playlists()
+    # ── Layout ─────────────────────────────────────────────────────────────────
 
+    def compose(self) -> ComposeResult:
         with Vertical(id="pl-dialog"):
             yield Label("Playlists Manager", id="pl-title")
 
-            # Split view: List of playlists on left, track preview on right
             with Horizontal(id="pl-split-view"):
                 with Vertical(id="pl-left-panel"):
                     yield Label("Saved Playlists", id="pl-list-label")
                     with ListView(id="pl-list"):
-                        for pl in playlists:
+                        for pl in list_playlists():
                             yield PlaylistItem(pl)
 
                 with Vertical(id="pl-right-panel"):
                     yield Label("Tracks Preview", id="pl-preview-label")
                     yield DataTable(id="pl-preview-table")
 
-            # Save Current Queue section
             with Horizontal(id="pl-save-row"):
                 yield Input(placeholder="Save current queue as...", id="pl-save-input")
                 yield Button("Save Queue", id="pl-btn-save", variant="primary")
 
-            # Action buttons
             with Horizontal(id="pl-actions-row"):
                 yield Button("Load (Replace Queue)", id="pl-btn-load", variant="success")
                 yield Button("Append to Queue", id="pl-btn-append")
@@ -62,38 +66,66 @@ class PlaylistScreen(ModalScreen[dict | None]):
         table.add_columns("Title", "Artist", "Time")
         table.cursor_type = "row"
 
-        # Focus list on launch
         self.query_one("#pl-list").focus()
 
-        # Load first playlist preview if available
         playlists = list_playlists()
         if playlists:
-            self._update_preview(playlists[0])
+            self._select_index(0, playlists[0])
+
+    # ── Selection helpers ──────────────────────────────────────────────────────
+    #
+    # The selection is always derived from the ListView itself rather than from
+    # a cached field, because rebuilding the list emits a *deferred*
+    # Highlighted event for the item that was just removed. Trusting that event
+    # could point Load/Append/Delete at a different playlist than the one
+    # visibly highlighted — and Delete would remove the wrong file.
+
+    def _playlist_list(self) -> ListView:
+        return self.query_one("#pl-list", ListView)
+
+    def _name_at(self, index: int | None) -> str | None:
+        if index is None:
+            return None
+        children = self._playlist_list().children
+        if 0 <= index < len(children):
+            child = children[index]
+            if isinstance(child, PlaylistItem):
+                return child.playlist_name
+        return None
+
+    def _selected_name(self) -> str | None:
+        """The playlist the user actually has highlighted right now."""
+        return self._name_at(self._playlist_list().index)
+
+    def _select_index(self, index: int, name: str | None = None) -> None:
+        """Highlight a row and show ``name`` (or the row's own name) as preview.
+
+        The name is passed explicitly because ``ListView`` mounts appended
+        children asynchronously, so reading them back here can be too early.
+        """
+        lv = self._playlist_list()
+        if lv.children:
+            lv.index = index
+        shown = name or self._name_at(index)
+        if shown:
+            self._update_preview(shown)
+
+    # ── Events ─────────────────────────────────────────────────────────────────
 
     def on_list_view_highlighted(self, event: ListView.Highlighted) -> None:
-        if isinstance(event.item, PlaylistItem):
-            self._update_preview(event.item.playlist_name)
+        if not isinstance(event.item, PlaylistItem):
+            return
+        # ListView posts Highlighted asynchronously, so an event for a row that
+        # is no longer (or not yet) the highlighted one can arrive after we have
+        # deliberately selected another row. Only trust the live highlight.
+        if self._playlist_list().highlighted_child is not event.item:
+            return
+        self._update_preview(event.item.playlist_name)
 
     def on_list_view_selected(self, event: ListView.Selected) -> None:
-        # H1: Enter on a playlist triggers the Load action — the most natural
-        # terminal UX. Previously we stopped the event (did nothing).
+        # Enter on a playlist loads it — the most natural terminal UX.
         event.stop()
         self._dispatch_action("load")
-
-    def _update_preview(self, name: str) -> None:
-        self.selected_playlist = name
-        tracks = load_playlist(name)
-
-        # Update preview label
-        self.query_one("#pl-preview-label", Label).update(f"Tracks in '{name}' ({len(tracks)})")
-
-        table = self.query_one("#pl-preview-table", DataTable)
-        table.clear()
-        for idx, t in enumerate(tracks):
-            title  = Text(t["title"],              style="#ebdbb2")
-            artist = Text(t.get("artist", ""),     style="#a89984")
-            dur    = Text(t.get("duration", "--:--"), style="#8ec07c")
-            table.add_row(title, artist, dur, key=str(idx))
 
     def on_button_pressed(self, event: Button.Pressed) -> None:
         bid = event.button.id
@@ -112,33 +144,58 @@ class PlaylistScreen(ModalScreen[dict | None]):
         if event.input.id == "pl-save-input":
             self._save_queue()
 
+    # ── Actions ────────────────────────────────────────────────────────────────
+
+    def _update_preview(self, name: str) -> None:
+        self.selected_playlist = name
+        tracks = load_playlist(name)
+
+        self.query_one("#pl-preview-label", Label).update(
+            f"Tracks in '{name}' ({len(tracks)})"
+        )
+
+        table = self.query_one("#pl-preview-table", DataTable)
+        table.clear()
+        for idx, t in enumerate(tracks):
+            table.add_row(
+                Text(t["title"], style=FG),
+                Text(t.get("artist", ""), style=FG3),
+                Text(t.get("duration", "--:--"), style=AQUA),
+                key=str(idx),
+            )
+
     def _dispatch_action(self, action: str) -> None:
-        if self.selected_playlist:
-            tracks = load_playlist(self.selected_playlist)
-            if tracks:
-                self.dismiss({"action": action, "tracks": tracks})
-            else:
-                self.app.notify(f"Playlist '{self.selected_playlist}' has no tracks.", severity="warning", timeout=3)
+        name = self._selected_name()
+        if not name:
+            self.app.notify("Select a playlist first.", severity="warning", timeout=3)
+            return
+        tracks = load_playlist(name)
+        if tracks:
+            self.dismiss({"action": action, "tracks": tracks})
+        else:
+            self.app.notify(f"Playlist '{name}' has no tracks.", severity="warning", timeout=3)
 
     def _delete_selected(self) -> None:
-        if self.selected_playlist:
-            delete_playlist(self.selected_playlist)
+        name = self._selected_name()
+        if not name:
+            self.app.notify("Select a playlist first.", severity="warning", timeout=3)
+            return
+        if not delete_playlist(name):
+            self.app.notify(f"Could not delete '{name}'.", severity="error", timeout=4)
+            return
 
-            # Refresh list
-            lv = self.query_one("#pl-list", ListView)
-            lv.clear()
-            playlists = list_playlists()
-            for pl in playlists:
-                lv.append(PlaylistItem(pl))
+        lv = self._playlist_list()
+        lv.clear()
+        playlists = list_playlists()
+        for pl in playlists:
+            lv.append(PlaylistItem(pl))
 
-            # Clear preview or load next
-            if playlists:
-                self._update_preview(playlists[0])
-                lv.index = 0
-            else:
-                self.selected_playlist = None
-                self.query_one("#pl-preview-label", Label).update("Tracks Preview")
-                self.query_one("#pl-preview-table", DataTable).clear()
+        if playlists:
+            self._select_index(0, playlists[0])
+        else:
+            self.selected_playlist = None
+            self.query_one("#pl-preview-label", Label).update("Tracks Preview")
+            self.query_one("#pl-preview-table", DataTable).clear()
 
     def _save_queue(self) -> None:
         input_w = self.query_one("#pl-save-input", Input)
@@ -150,34 +207,36 @@ class PlaylistScreen(ModalScreen[dict | None]):
             self.app.notify("Queue is empty — nothing to save.", severity="warning", timeout=3)
             return
 
-        # H4: Overwrite protection — first press warns, second press confirms.
-        if name in list_playlists():
-            if self._overwrite_confirm != name:
-                self._overwrite_confirm = name
-                self.app.notify(
-                    f"'{name}' already exists. Press Save again to overwrite.",
-                    severity="warning",
-                    timeout=4,
-                )
-                return
-        # Either name is new, or user confirmed overwrite with a second press
+        # Compare sanitized names: get_playlist_path() sanitizes too, so
+        # comparing raw input would bypass the overwrite confirmation.
+        safe_name = sanitize_playlist_name(name)
+        if safe_name in list_playlists() and self._overwrite_confirm != safe_name:
+            self._overwrite_confirm = safe_name
+            self.app.notify(
+                f"'{safe_name}' already exists. Press Save again to overwrite.",
+                severity="warning",
+                timeout=4,
+            )
+            return
         self._overwrite_confirm = None
 
-        save_playlist(name, self.current_queue)
+        if not save_playlist(safe_name, self.current_queue):
+            self.app.notify(
+                f"Could not save '{safe_name}'. Check that ~/.config is writable.",
+                severity="error",
+                timeout=5,
+            )
+            return
+
         input_w.value = ""
 
-        # Refresh list and select the newly saved playlist
-        lv = self.query_one("#pl-list", ListView)
+        lv = self._playlist_list()
         lv.clear()
         playlists = list_playlists()
-
         selected_idx = 0
         for idx, pl in enumerate(playlists):
             lv.append(PlaylistItem(pl))
-            if pl == name:
+            if pl == safe_name:
                 selected_idx = idx
-
-        # C2: lv.index is a settable reactive
         if playlists:
-            lv.index = selected_idx
-            self._update_preview(name)
+            self._select_index(selected_idx, safe_name)
